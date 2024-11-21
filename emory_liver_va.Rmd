@@ -1,0 +1,1540 @@
+---
+title: "va_paper_1_gupta"
+author: "Priya M Gupta"
+date: "2023-02-13"
+output: html_document
+---
+
+
+```{r setting up the environment, eval = F, include = F, echo = F, warning = F, message = F, results = F}
+# chuck name = setting
+# echo = print or do not print the code in the pdf output
+if(!("pacman" %in% installed.packages()[,"Package"])) {
+  install.packages("pacman", dependencies = TRUE)
+}
+library(pacman)
+
+pacman::p_load(
+  anthro,   knitr,   kableExtra,  readxl,  stringr,  tidyr,  haven,  ggplot2,  cowplot, 
+  gridExtra,   grid,  purrr,  lme4,  lmerTest,  broom.mixed,  DescTools,  data.table, 
+  survey,  metafor,  plotrix,  BRINDA,  jtools,  forcats,  tibble, readr, Hmisc, rms, knitr, dplyr, devtools, Table1, lessR, gtsummary # I remove the plyr package
+)
+#tinytex::install_tinytex()
+#library(plyr, include.only = c('rbind.fill')) 
+
+#source("package/brinda_analysis_support_other.R")
+
+options(kableExtra.latex.load_packages = T)
+options(knitr.duplicate.label = 'allow')
+
+packages <- c("anthro", "knitr", "kableExtra", "readxl", "tringr", "tidyr", "haven", "ggplot2", "cowplot", 
+  "gridExtra", "grid","purrr", "lme4","lmerTest", "broom.mixed","DescTools","data.table", 
+  "survey", "metafor", "plotrix", "BRINDA", "jtools", "forcats","tibble", "readr", "Hmisc", "rms", "dplyr", "devtools", "Table1", "lessR", "gtsummary")
+
+lapply(packages, require, character.only = TRUE)
+
+```
+
+
+```{r loading data: liver specimen analytic(update with latest analytic file), echo = FALSE, warning = FALSE, message = FALSE}
+
+path <- "/Users/priyamgdas/Library/CloudStorage/OneDrive-EmoryUniversity/Dissertation Files/Manuscripts/Aim 3- Hepatic Vitamin A Concentrations and Association with Infectious Causes of Child Deaths/6 - Analysis Replication/datasets"
+
+liverva<- read.csv(file = paste(path, "liver_vitamin_a_umwisc.csv", sep = "/"))#405 liver samples randomly selected
+colnames(liverva) <- tolower(colnames(liverva))
+
+specimen<- read.csv(file = paste(path, "mits_specimen_collected_8_july_22.csv", sep = "/"))#data2 in sas
+colnames(specimen) <- tolower(colnames(specimen))
+
+analytic<- read.csv(file = paste(path, "analytic_11_feb_23.csv", sep = "/"))#data4 in sas
+colnames(analytic) <- tolower(colnames(analytic))
+```
+
+
+```{r linking specimen/analytic/lab data to CHAMPSID, echo = FALSE, warning = FALSE, message = FALSE}
+dt1<-merge(x=liverva, y=specimen, by="liver_id")
+dt2<-merge(x=dt1, y=analytic, by="champsid")
+```
+
+
+```{r selecting key variables, echo = FALSE, warning = FALSE, message = FALSE}
+dt3<- dt2 |> 
+  dplyr::select(
+                #liver variables
+                champsid, liver_id, inclexcl, country, liver_va, low_extract_eff, kitid, specimentype, 
+                
+                #analytic variables
+                site_name, catchmentid, age_group, case_type_calc,case_type_dpf_flag, calc_sex, calc_dob, 
+                calc_tob, calc_dod, calc_tod, 
+                
+                ga_maternal_months, ga_child_months, ga_child_method, 
+                
+                bw_maternal, bw_child, 
+                
+                calc_location, pregnancycomplications, laborcomplications, 
+                childcomplications, mits_flag, mits_date, mits_time, calc_postmortem_hrs, 
+    
+                #anthropometry
+                height_cm, 
+                weight_kg, 
+                muac_cm, 
+                head_circumf_cm,
+                calc_waz, 
+                calc_whz, 
+                calc_haz, 
+                calc_hz_z, 
+                calc_muac_z, 
+    
+                #causes of death
+                ic_champs_group_desc, 
+                uc_champs_group_desc, 
+                
+                morbid_cond_01_champs_group_desc,
+                morbid_cond_02_champs_group_desc,
+                morbid_cond_03_champs_group_desc,
+                morbid_cond_04_champs_group_desc,
+                morbid_cond_05_champs_group_desc,
+                morbid_cond_06_champs_group_desc,
+                morbid_cond_07_champs_group_desc,
+                morbid_cond_08_champs_group_desc,
+                
+                count_of_causal_conditions,
+                
+                #filters variables
+                embargoed_record,
+                sensitive_case,                    
+                publication_suspended,
+                m00014,
+                m00015,
+                m00020,
+                m00021,
+                m00023,
+                m00024,
+                m00034,
+                m00041,
+                m00060) 
+```
+
+```{r renaming key variables, echo = FALSE, warning = FALSE, message = FALSE}
+dt4<-dt3|> 
+dplyr::rename(  dob= calc_dob,
+                dod= calc_dod,
+  
+                ht=height_cm, 
+                wt=weight_kg, 
+                ac=muac_cm, 
+                hc=head_circumf_cm,
+               
+                ic=ic_champs_group_desc, 
+                uc=uc_champs_group_desc, 
+                
+                mc1=morbid_cond_01_champs_group_desc,
+                mc2=morbid_cond_02_champs_group_desc,
+                mc3=morbid_cond_03_champs_group_desc,
+                mc4=morbid_cond_04_champs_group_desc,
+                mc5=morbid_cond_05_champs_group_desc,
+                mc6=morbid_cond_06_champs_group_desc,
+                mc7=morbid_cond_07_champs_group_desc,
+                mc8=morbid_cond_08_champs_group_desc,
+                
+                numb_cc=count_of_causal_conditions)           
+```
+
+
+```{r creating variables for WHO Z score package, echo = FALSE, warning = FALSE, message = FALSE}
+library("dplyr")
+dt5 <- dt4 |> 
+  mutate(sex = as.factor(dplyr::case_when(calc_sex == "CH00030" ~ "M", 
+                                          calc_sex == "CH00031" ~ "F")), 
+         
+         sexn = (dplyr::case_when(sex == "M" ~ 1, 
+                                  sex ==  "F" ~ 2)), 
+         
+         dod = as.Date(dod), 
+         
+         dob = as.Date(dob),   
+         
+         #calculate_age = interval(ymd(dob), ymd(dod))),
+         
+         age_d = as.numeric(abs(dod - dob)),
+         #age_d2 = difftime(dod, dob, unit="days"),
+         
+         age_m = as.numeric(floor((dod - dob)/30.4375)),
+         #age_m2 = ((as.period(interval(start = dob, end = dod))$year)*12 +(as.period(interval(start = dob, end = dod))$month)),
+
+         htlg = ht, 
+         wt = wt, 
+         muac = ac, 
+         hc = hc)
+            
+```
+
+
+```{r run WHO Z-score package, echo = FALSE, warning = FALSE, message = FALSE}
+
+dt6 <- with(dt5, 
+            anthro::anthro_zscores(
+              sex = sexn, 
+              age = age_d, 
+              is_age_in_month = FALSE,
+              weight = wt, 
+              lenhei = htlg,
+              headc = hc, 
+              armc = muac))
+```
+
+
+```{r bind z scores output to main datafiles, echo = FALSE, warning = FALSE, message = FALSE}
+dt7 <- cbind(dt5, dt6)
+```
+
+
+```{r defining liver vitamin A, echo = FALSE, warning = FALSE, message = FALSE}
+#   EXPOSURE: Liver Vitamin A - 3 levels - deficiency, adequate (reference), and high, please check if lines 298-308 are appropriate for ordinal regression
+#   OUTCOME: Infectious or malnutrition-mortality
+#   Note: In the code below I have experimented with different categories for liver VA based on discussions regarding the approach for this analysis. Briefly, we considered, 5-level, 4-level, 3-level. 
+dt8<-dt7 |> 
+  dplyr::mutate(
+    lva= as.numeric(liver_va),
+    
+    vad = ifelse(lva <= 0.10, 1, 0),
+    
+    lva_tb_excluded_3 = ifelse(lva >= 3.0, 1, 0),#exlcusion criteria recommended by the lab
+    
+    lva_tb_excluded_10 = ifelse(lva >= 10.0, 1, 0),#exlcusion criteria recommended by the lab
+    
+    #2/21 changed VA definitons per Sherry'a 2019 definition, not 2015 definition as below
+    #ND=new definition
+    #OD=original definition
+    
+    lva4lvl_nd  = dplyr::case_when(lva >= 0.0 & lva<= 0.10 ~ 1,# deficient
+                                    lva > 0.10 & lva < 0.7 ~ 2,# adequate
+                                     lva >= 0.70 & lva < 1.00 ~ 3,# high
+                                      lva >= 1.00 ~ 4),# hypervitaminotic
+    
+    lva4lvl_nd = factor(lva4lvl_nd, 
+                        levels = c(1, 2, 3, 4),
+                        labels = c("Deficient", "Adequate", "High", "Hypervitaminotic")),
+   
+      # 3 - level variable for ordinal regression
+    lva3lvl_nd  = dplyr::case_when(lva >= 0.0 & lva<= 0.10 ~ 1,# deficient
+                           lva > 0.10 & lva < 0.7 ~ 0,# adequate (reference)
+                           lva >= 0.70  ~ NA_real_))# high to excess
+
+```
+
+```{r defining covariates: demographic variables}
+dt9<-dt8 |> 
+  dplyr::mutate(
+    agegroup_n1    = dplyr::case_when(age_group == "CH00716" ~ 1,
+                              age_group == "CH01404" ~ 2,
+                              age_group == "CH01405" ~ 3,
+                              age_group == "CH01406" ~ 4,
+                              age_group == "CH00718" ~ 5,
+                              age_group == "CH00719" ~ 6),
+   
+    agegroup_n2    = dplyr::case_when(agegroup_n1 == 1 | agegroup_n1 == 2 ~ 1,
+                               agegroup_n1 == 3 | agegroup_n1 == 4 ~ 2,
+                               agegroup_n1 == 5 | agegroup_n1 == 6 ~ 3),
+    
+    sex    = dplyr::case_when(calc_sex == "CH00031" ~ 1,
+                       calc_sex == "CH00030" ~ 2))
+```
+
+```{r defining covariates: any malnutrition/wasting/stunting/underweight}
+dt10<-dt9 |> 
+  dplyr::mutate(    
+    #revising code to define UL and LL for zscore indicators
+    anyunder = dplyr::case_when(zwei >= -10 & zwei < -2 ~1,
+                         zwei >= -2 & zwei < 5 ~0),
+    
+    anywast = dplyr::case_when(zwfl >= -10 & zwfl < -2 ~1,
+                        zwfl >= -2 & zwfl < 5 ~0),
+    
+    anystunt = dplyr::case_when(zlen >= -10 & zlen < -2 ~ 1,
+                         zlen >= -2 & zlen < 6 ~ 0),
+
+    anymal = dplyr::case_when(anystunt == 1 | anyunder == 1 | anywast == 1 ~ 1, 
+                              anystunt == 0 & anyunder == 0 & anywast == 0 ~ 0,
+                       TRUE ~ NA_real_),
+    
+    anystunt = factor(anystunt, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    
+    anywast = factor(anywast, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    
+    anyunder = factor(anyunder, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    
+    anymal = factor(anymal, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    
+    agegroup_n2l = factor(agegroup_n2,
+                    levels = c(1,2,3),
+                    labels = c("Stillbirths or Death in the first 24 hours",
+                    "Neonates (Neonate (1 to 27 days)",
+                    "Infants and Children (28 days to < 60 months)")))
+```
+
+```{r defining covariates: low birth weight and very low birth weight}
+
+dt11<-dt10 |> 
+  
+    dplyr::mutate(        
+    bw_m = as.numeric(bw_maternal),
+        
+    bw_c = as.numeric(bw_child),
+    
+    #make sure weight is in the same units as bw- convert from kg to g
+    wt_g = (wt*1000),
+ 
+    bw_0 = dplyr:: case_when(is.na(bw_m) & is.na(bw_c) ~ 0,
+                             is.na(bw_m & !is.na(bw_c)) ~ 1,
+                             !is.na(bw_m) & is.na(bw_c) ~ 2,
+                             !is.na(bw_m) & !is.na(bw_c) ~ 3,
+                             bw_m >= bw_c ~ 4,
+                             bw_m >= bw_c ~ 5),
+    
+    bw = dplyr::case_when(
+                   (agegroup_n2 == 1 & is.na(bw_c) == T & is.na(bw_m)) == T ~ wt_g,
+                   (agegroup_n2 == 1 & is.na(bw_c) == F & is.na(bw_m)) == T ~ bw_c,
+                   (agegroup_n2 == 1 & is.na(bw_c) == T & is.na(bw_m)) == F ~ bw_m,
+                   (agegroup_n2 == 1 & (is.na(bw_c) == F & is.na(bw_m) == F) & (bw_c <= bw_m)) ~ bw_c,
+                   (agegroup_n2 == 1 & (is.na(bw_c) == F & (is.na(bw_m) == F) & (bw_c > bw_m))) ~ bw_m,
+                   
+                   
+                   (agegroup_n2 == 2 & is.na(bw_c) == T & is.na(bw_m)) == T ~ NA_real_,
+                   (agegroup_n2 == 2 & is.na(bw_c) == F & is.na(bw_m)) == T ~ bw_c,
+                   (agegroup_n2 == 2 & is.na(bw_c) == T & is.na(bw_m)) == F ~ bw_m,
+                   (agegroup_n2 == 2 & (is.na(bw_c) == F & is.na(bw_m) == F & (bw_c <= bw_m))) ~ bw_c,
+                   (agegroup_n2 == 2 & (is.na(bw_c) == F & (is.na(bw_m) == F) & (bw_c > bw_m))) ~ bw_m,
+                   
+                   
+                   (agegroup_n2 == 3 & is.na(bw_c) == T & is.na(bw_m)) == T ~ NA_real_,
+                   (agegroup_n2 == 3 & is.na(bw_c) == F & is.na(bw_m)) == T ~ bw_c,
+                   (agegroup_n2 == 3 & is.na(bw_c) == T & is.na(bw_m)) == F ~ bw_m,
+                   (agegroup_n2 == 3 & is.na(bw_c) == F & is.na(bw_m) == F & (bw_c <= bw_m)) ~ bw_c,
+                   (agegroup_n2 == 3 & (is.na(bw_c) == F & (is.na(bw_m) == F) & (bw_c > bw_m))) ~ bw_m),
+    
+                    bw_nm = if_else(!is.na(bw), 1, 0),
+    
+                    lbw = if_else(bw<2500,1,0),
+                   
+                    
+    lbwl = factor(lbw, 
+                    levels = c(1,0), 
+                    labels = c("Yes", "No")),
+    
+                    vlbw = if_else(bw<1500, 1, 0),
+    
+    vlbwl = factor(vlbw, 
+                    levels = c(1,0), 
+                    labels = c("Yes", "No")),
+    
+                    under45 = if_else(htlg<45, 1, 0),
+     
+                    agegroup_n2l = factor(agegroup_n2, 
+                        levels = c(1,2,3), 
+                        labels = c("Stillbirths or Death in the first 24 hours",
+                                  "Neonates (Neonate (1 to 27 days)",
+                                  "Infants and Children (28 days to < 60 months)")),
+                sex = factor(sex, 
+                 levels = c(1,2), 
+                 labels = c("Females", "Males")),
+    
+               calc_location = factor(calc_location, 
+                 levels = c("community", "facility"), 
+                 labels = c("Community", "Facility")))
+
+```
+    
+    
+
+```{r define outcomes: malnutrition and infectious CODs, echo = FALSE, warning = FALSE, message = FALSE}
+infectcod1 <- c("Diarrheal Diseases",
+                "Congenital infection",
+                "HIV",
+                "Lower respiratory infections",
+                "Malaria",
+                "Measles",
+                "Meningitis/Encephalitis",
+                "Neonatal sepsis",
+                "Other infections",
+                "Rabies",
+                "Sepsis",
+                "Syphilis",
+                "Tuberculosis",
+                "Upper respiratory infections")
+
+infectcod2 <- c("Diarrheal Diseases",
+                "Lower respiratory infections",
+                "Malaria",
+                "Measles",
+                "Meningitis/Encephalitis",
+                "Neonatal sepsis",
+                "Other infections",
+                "Sepsis",
+                "Tuberculosis",
+                "Upper respiratory infections")
+
+infectcod3 <- c("Lower respiratory infections",
+                "Neonatal sepsis",
+                "Sepsis",
+                "Diarrheal Diseases")
+
+undetermined <- c("Undetermined")
+
+malncod <- c("Malnutrition")
+
+dt12<-dt11 |> 
+  dplyr::rowwise() |> 
+  dplyr::mutate(infectious1 = + any(dplyr::c_across(cols = ic | 
+                                       uc|  
+                                       mc1| 
+                                       mc2| 
+                                       mc3| 
+                                       mc4| 
+                                       mc5| 
+                                       mc6|  
+                                       mc7| 
+                                       mc8) %in% infectcod1)) |> 
+  
+  dplyr::ungroup() |> 
+  
+  dplyr::rowwise() |> 
+  dplyr::mutate(infectious2 = + any(dplyr::c_across(cols = ic | 
+                                       uc|  
+                                       mc1| 
+                                       mc2| 
+                                       mc3| 
+                                       mc4| 
+                                       mc5| 
+                                       mc6|  
+                                       mc7| 
+                                       mc8) %in% infectcod2)) |> 
+  
+  dplyr::ungroup() |> 
+  
+  dplyr::rowwise() |> 
+  dplyr::mutate(maln = + any(dplyr::c_across(cols = ic | 
+                                uc|  
+                                mc1| 
+                                mc2| 
+                                mc3| 
+                                mc4| 
+                                mc5| 
+                                mc6|  
+                                mc7| 
+                                mc8) %in% malncod)) |> 
+  dplyr::ungroup() |>
+    
+  dplyr::rowwise() |> 
+  dplyr::mutate(infectious3 = + any(dplyr::c_across(cols = ic | 
+                                       uc|  
+                                       mc1| 
+                                       mc2| 
+                                       mc3| 
+                                       mc4| 
+                                       mc5| 
+                                       mc6|  
+                                       mc7| 
+                                       mc8) %in% infectcod3)) |> 
+  
+  dplyr::ungroup() 
+
+```
+
+
+```{r defining weight/strata/cluster for svydesign procedure, echo = FALSE, warning = FALSE, message = FALSE}
+dt13<-dt12 |>
+  mutate (weight = 1,  strata = 1,   cluster = 1)
+
+```
+
+
+```{r inclusion criteria, echo = FALSE, warning = FALSE, message = FALSE}
+lva_inclusion_data <-
+  dt13 |>#405 sent, 1 sent in error
+  dplyr::filter(mits_flag == 1) |> #n=404
+  dplyr::filter(m00060 == 1) |> #n=404
+  dplyr::filter(sensitive_case==0) |> #n=404
+  dplyr::filter(!is.na(liver_id)) |> #n=404, 1 missing ID
+  dplyr::filter(!is.na(champsid)) |> #n=404
+  dplyr::filter(inclexcl == 1) |> #n=403, analyzed
+  #filter(publication_suspended==0) |> # -10 observations, 
+  dplyr::filter(low_extract_eff==0) |>  # n=368, non-viable extraction inefficiencies
+  dplyr::filter(lva_tb_excluded_3== 0) # n=366, sherry recommended to exclude 2 due to high livers
+                   # n=366
+  #dplyr::filter(!is.na(htlg)) |> #n=366
+   # dplyr::filter(!is.na(wt))#n
+
+lva_inclusion_data_ex_wast<-lva_inclusion_data |> 
+    dplyr::filter(!is.na(anywast)) #took out cases where wasting classification was missing so sample drops to n=242
+    
+    
+infantschild<-lva_inclusion_data |> 
+    filter(agegroup_n2==3)
+
+neonates<-lva_inclusion_data |> 
+    filter(agegroup_n2==2)
+
+sbd24h<-lva_inclusion_data |> 
+    filter(agegroup_n2==1)
+
+table(lva_inclusion_data$anystunt)
+
+table(lva_inclusion_data$anyunder[!is.na(lva_inclusion_data$wt)], useNA = "always")
+
+missing_anyunder <- lva_inclusion_data |> 
+    dplyr::select(champsid, age_d, wt, htlg, zwei, zlen, zwfl, anyunder, anystunt, anywast) |> 
+    subset(is.na(anyunder)) 
+
+missing_anystunt <- lva_inclusion_data |> 
+    dplyr::select(champsid, under45, bw_c, bw_m, bw, age_d, wt, htlg, zwei, zlen, zwfl, anyunder, anystunt, anywast) |> 
+    subset(is.na(anystunt)) 
+print(missing_anystunt)
+
+missing_anywast <- lva_inclusion_data |> 
+    dplyr::select(champsid, under45, age_d, wt, htlg, zwei, zlen, zwfl, anyunder, anystunt, anywast) |> 
+    subset(is.na(anywast)) 
+print(missing_anywast)
+
+missing_bw <- lva_inclusion_data |> 
+    dplyr::select(champsid, agegroup_n2l, under45, bw_c, bw_m, wt, bw) |> 
+    subset(is.na(bw)) 
+print(missing_bw)
+
+missing_bw_ordered <- missing_bw |> 
+  dplyr::arrange(desc(agegroup_n2l))
+
+print(missing_bw_ordered)
+
+
+missing_anymal <- lva_inclusion_data |> 
+    dplyr::select(champsid, under45, age_d, wt, htlg, zwei, zlen, zwfl, anyunder, anystunt, anywast, anymal) |> 
+    subset(is.na(anymal)) 
+print(missing_anymal)
+```
+ 
+
+
+```{r TABLE 1 , echo = FALSE, warning = FALSE, message = FALSE}
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+tbl1<-lva_inclusion_data |> dplyr::select(country, sex, agegroup_n2l, calc_location, lbw, anyunder, anystunt, 
+                                          anywast, anymal, infectious1, infectious3)
+
+library("gtsummary")
+tbl1|> tbl_summary(  by = agegroup_n2l,
+                     label = list(sex ~ "Sex",
+                                  country ~ "CHAMPS site", 
+                                  calc_location ~ "Location of Death",
+                                  lbw ~ "Low Birthweight",
+                                  anyunder ~ "Underweight",
+                                  anystunt ~ "Stunted",
+                                  anywast ~ "Wasted",
+                                  anymal ~ "Any Undernutrition based on Anthropometry at Death",
+                                  infectious1 ~ "Infectious Disease Deaths",
+                                  infectious3 ~ "Lower respiratory infection, Sepsis, and Diarrheal Diseases"),
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row")|> 
+  add_overall() |>                  
+    #add_difference() |> 
+add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Age Group**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("**Table 1. Demographic characteristics of children under 5 years (n=366) with liver specimens from CHAMPS Kenya and South Africa Sites**") 
+
+
+```
+
+
+```{r TABLE 2, echo = FALSE, warning = FALSE, message = FALSE}
+
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+
+tbl2<-lva_inclusion_data |> dplyr::select(lva4lvl_nd, country, sex, agegroup_n2l, calc_location, lbw, anyunder, anystunt, anywast, anymal, infectious1,infectious3)
+                                   
+tbl2 |> tbl_summary(by = lva4lvl_nd,
+                    label = list( sex ~ "Sex",
+                                  agegroup_n2l ~ "Age at death", 
+                                  calc_location ~ "Location of death",
+                                  lbw ~ "Low Birthweight",
+                                  anyunder ~ "Underweight",
+                                  anystunt ~ "Stunted",
+                                  anywast ~ "Wasted",
+                                  anymal ~ "Any undernutrition based on anthropometry at death",
+                                  infectious1~ "Infectious disease deaths",
+                                  infectious3~ "Lower respiratory infection, Sepsis, and Diarrheal Diseases"),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2", "stat_3", "stat_4") ~ "**Vitamin A Status**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("**Table 2. Vitamin A Status by Demographic Characteristics of Children under 5 years (n=366) with Analyzed Liver Specimens from CHAMPS Kenya and South Africa Sites **") 
+
+#table(lva_inclusion_data$lbwl,  useNA="always")
+#table(lva_inclusion_data$lbwl, lva_inclusion_data$lva4lvl_nd, useNA="always")
+
+
+#table(lva_inclusion_data$anyunder, useNA="always")
+#table(lva_inclusion_data$anyunder, lva_inclusion_data$lva4lvl_nd, useNA="always")
+
+
+#table(lva_inclusion_data$anystunt, useNA="always")
+#table(lva_inclusion_data$anystunt, lva_inclusion_data$lva4lvl_nd, useNA="always")
+
+
+#table(lva_inclusion_data$anywast, useNA="always")
+#table(lva_inclusion_data$anywast, lva_inclusion_data$lva4lvl_nd, useNA="always")
+
+
+#table(lva_inclusion_data$anymal, useNA="always")
+#table(lva_inclusion_data$anymal, lva_inclusion_data$lva4lvl_nd, useNA="always")
+
+
+#table(lva_inclusion_data$infectious1, useNA="always")
+#table(lva_inclusion_data$infectious1, lva_inclusion_data$lva4lvl_nd, useNA="always")
+```
+
+    
+```{r TABLE 3, echo = FALSE}
+install.packages("MASS") 
+install.packages("reshape2") 
+install.packages("reshape") 
+
+library(MASS) 
+library(reshape2) 
+library(reshape) 
+
+# identify most common causes
+library(tidyr)
+
+#step 1
+
+top10cod <- lva_inclusion_data |>  
+  # select variables of interest
+      dplyr::select(
+        champsid,
+        agegroup_n2,
+        # agegroup_n2l,   
+        ic,    
+        uc,    
+        mc1,    
+        mc2,    
+        mc3,    
+        mc4,    
+        mc5,
+        mc6,
+        mc7,
+        mc8) |> 
+  # long format
+   reshape2::melt(id = c('champsid','agegroup_n2')) %>%
+   
+     # remove blanks
+  dplyr::filter(nchar(value) > 0) %>%
+  
+  # remove duplicates
+  dplyr::select(-variable) %>%
+  distinct() %>%
+  
+  # count number of causes of death by age
+  dplyr::group_by(agegroup_n2) %>%
+  dplyr::count(value) %>%
+  
+  # proportion
+  dplyr::mutate(prop = paste(n, " (", sprintf('%.1f', n / sum(n) * 100), ")", sep="")) %>%
+  
+  dplyr::select(-n) %>%
+  tidyr::spread(agegroup_n2, prop, fill = '0 (0)')
+
+
+```
+
+
+```{r  TABLE 4, echo = FALSE, warning = FALSE, message = FALSE}
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+tbl4<-lva_inclusion_data |> dplyr::select(country, sex, agegroup_n2l, calc_location, anyunder, anystunt, anywast, maln, anymal, infectious1, infectious3, lva3lvl_nd, lbwl, vlbwl, under45)
+
+tbl4|> tbl_summary(
+                     by = under45,
+                     label = list(sex ~ "Sex",
+                                  agegroup_n2l ~ "Age at death", 
+                                  calc_location ~ "Location of death",
+                                  anyunder ~ "Underweight",
+                                  #anystunt ~ "Stunted",
+                                  anywast ~ "Wasted",
+                                  anymal ~ "Any undernutrition based on anthropometry at death",
+                                  maln ~ "Death due to malnutrition",
+                                  infectious1 ~ "Infectious disease deaths",
+                                  lva3lvl_nd ~ "Vitamin A Deficiency",
+                                  lbwl ~ "LBW (BW<2500 g)",
+                                  vlbwl ~ "VLBW (BW<1500 g)"),
+                    
+                    statistic = all_continuous() ~ "{mean} ({sd})", missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "col") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Under 45 cm for Ht/Lg, 0=no, 1=yes**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("**Table 4. Demographic characteristics of children under 45 cm in length/height in CHAMPS Kenya and South Africa Sites**") |> 
+    bold_labels() 
+
+#table(lva_inclusion_data$bw_0, lva_inclusion_data$lbw, useNA = "always")
+
+#table(lva_inclusion_data$bw_0, lva_inclusion_data$lbw, lva_inclusion_data$agegroup_n2, useNA = "always")
+
+#table(lva_inclusion_data$lbw, useNA = "always")
+
+
+tbl4|> tbl_summary(
+                     by = anywast,
+                     label = list(sex ~ "Sex",
+                                  agegroup_n2l ~ "Age at death", 
+                                  calc_location ~ "Location of death",
+                                  anyunder ~ "Underweight",
+                                  #anystunt ~ "Stunted",
+                                  #anywast ~ "Wasted",
+                                  anymal ~ "Any undernutrition based on anthropometry at death",
+                                  maln ~ "Death due to malnutrition",
+                                  infectious1 ~ "Infectious disease deaths",
+                                  lva3lvl_nd ~ "Vitamin A Deficiency",
+                                  lbwl ~ "LBW (BW<2500 g)",
+                                  vlbwl ~ "VLBW (BW<1500 g)"),
+                    
+                    statistic = all_continuous() ~ "{mean} ({sd})", missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "col") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Wasted, 0=no, 1=yes**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("**Table 4. Demographic characteristics of wasted children under 5in CHAMPS Kenya and South Africa Sites**") |> 
+    bold_labels() 
+```
+
+
+```{r TABLE 5, echo = FALSE, warning = FALSE, message = FALSE}
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+
+tbl5<-lva_inclusion_data |> dplyr::select(country, sex, agegroup_n2l, calc_location, lbw, 
+                                    anyunder, anystunt, anywast, anymal, infectious1, infectious3,lva3lvl_nd) 
+                                   
+tbl5 |> tbl_summary(by = lva3lvl_nd,
+                    label = list( sex ~ "Sex",
+                                  agegroup_n2l ~ "Age at death", 
+                                  calc_location ~ "Location of death",
+                                  
+                                  lbw ~ "LBW (BW<2500 g)",
+                                  
+                                  anyunder ~ "Underweight",
+                                  anystunt ~ "Stunted",
+                                  anywast ~ "Wasted",
+                                  anymal ~ "Any undernutrition based on anthropometry at death",
+                                  
+                                  infectious3~ "Infectious disease deaths",
+                                  infectious1~ "LRIs/Sepsis/Neo"
+                                ),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Vitamin A Deficiency (Yes/No)**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("**Table 5**") 
+```
+
+
+
+```{r CONFOUNDING ASSESSMENT METHOD 1: CHI-SQ TESTS: EXPOSURE VAD AND COVARIATES} 
+#where is the p-value for age now? fixed 1/27/23 @ 8:30 AM :)
+
+#CONFOUNDING ASSESSMENT METHOD 1.0: CHI-SQ TESTS: COVAR and VA Status
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+
+tbl2<-lva_inclusion_data |> dplyr::select(lva3lvl_nd, country, sex, agegroup_n2l, calc_location, lbwl, anyunder, anystunt, anywast, anymal, infectious1, infectious3)
+                                   
+tbl2 |> tbl_summary(by = lva3lvl_nd,
+                    label = list( 
+                       
+                       country ~ "Site",
+                       sex ~ "Sex",
+                       agegroup_n2l ~ "Age at death", 
+                       calc_location ~ "Location of death",
+                                  
+                       lbwl ~ "LBW (BW<2500 g)",
+                                  
+                       anyunder ~ "Underweight",
+                       anystunt ~ "Stunted",
+                       anywast ~ "Wasted",
+                       anymal ~ "Any undernutrition based on anthropometry at death",
+                       
+                       infectious3 ~ "Infectious disease (associated with VA) deaths"),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Vitamin A Deficiency (Yes/No)**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("**Table 2. Vitamin A Deficiency by Demographic Characteristics of Children under 5 years (n=366) with Analyzed Liver Specimens from CHAMPS Kenya and South Africa Sites**") 
+
+
+```
+
+
+```{r CONFOUNDING ASSESSMENT METHOD 2: UNIVARIATE MODELS: EXPOSURE VAD AND COVARIATES} 
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+
+lva_inclusion_data |> 
+  dplyr::select(lva3lvl_nd, country, sex, agegroup_n2l, calc_location, lbwl, anyunder, anystunt, anywast, anymal, infectious1, infectious3) |> 
+  tbl_uvregression(
+    method = glm,
+    y = lva3lvl_nd,
+    method.args = list(family = binomial),
+    exponentiate = TRUE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 2)
+  ) |> 
+  add_global_p() |>  # add global p-value
+  add_nevent() |>  # add number of events of the outcome
+  add_q() |>  # adjusts global p-values for multiple testing
+  bold_p()|>  # bold p-values under a given threshold (default 0.05)
+  bold_p(t = 0.10, q = TRUE)|>  # now bold q-values under the threshold of 0.10
+  bold_labels()
+
+print 
+
+```
+
+
+```{r CONFOUNDING ASSESSMENT METHOD 1: CHI-SQ TESTS OUTCOME (ID Definition # 3A) AND COVARIATES}
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+
+tbl2<-lva_inclusion_data |> dplyr::select(lva3lvl_nd, country, sex, agegroup_n2l, calc_location, lbwl, anyunder, anystunt, anywast, anymal, infectious1, infectious3)
+                                   
+tbl2 |> tbl_summary(by = infectious3,
+                    label = list( 
+                       
+                       country ~ "Site",
+                       sex ~ "Sex",
+                       agegroup_n2l ~ "Age at death", 
+                       calc_location ~ "Location of death",
+                                  
+                       lbwl ~ "LBW (BW<2500 g)",
+                                  
+                       anyunder ~ "Underweight",
+                       anystunt ~ "Stunted",
+                       anywast ~ "Wasted",
+                       anymal ~ "Any undernutrition based on anthropometry at death"),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Infectious Disease (Yes/No)**") |> 
+bold_p() |> 
+    separate_p_footnotes() 
+```
+
+
+```{r CONFOUNDING ASSESSMENT METHOD 2: UNIVARIATE MODELS: OUTCOME (ID-3A) VAD AND COVARIATES}
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+lva_inclusion_data |> 
+  dplyr::select(infectious1, country, sex, agegroup_n2l, calc_location, lbwl, anyunder, anystunt, anywast, anymal)|> 
+  tbl_uvregression(
+    method = glm,
+    y = infectious1,
+    method.args = list(family = binomial),
+    exponentiate = TRUE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 2)
+  ) |> 
+  add_global_p() |>  # add global p-value
+  add_nevent() |>  # add number of events of the outcome
+  add_q() |>  # adjusts global p-values for multiple testing
+  bold_p()|>  # bold p-values under a given threshold (default 0.05)
+  bold_p(t = 0.10, q = TRUE)|>  # now bold q-values under the threshold of 0.10
+  bold_labels()
+
+```
+
+
+
+
+```{r CONFOUNDING ASSESSMENT METHOD 1: CHI-SQ TESTS OUTCOME (ID Definition # 3B) AND COVARIATES}
+
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+
+tbl2<-lva_inclusion_data |> dplyr::select(lva3lvl_nd, country, sex, agegroup_n2l, calc_location, lbwl, anyunder, anystunt, anywast, anymal, infectious1, infectious3)
+                                   
+tbl2 |> tbl_summary(by = infectious3,
+                    label = list( 
+                       
+                       country ~ "Site",
+                       sex ~ "Sex",
+                       agegroup_n2l ~ "Age at death", 
+                       calc_location ~ "Location of death",
+                                  
+                       lbwl ~ "LBW (BW<2500 g)",
+                                  
+                       anyunder ~ "Underweight",
+                       anystunt ~ "Stunted",
+                       anywast ~ "Wasted",
+                       anymal ~ "Any undernutrition based on anthropometry at death"),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Infectious Disease (Yes/No)**") |> 
+bold_p() |> 
+    separate_p_footnotes() 
+```
+
+
+```{r CCONFOUNDING ASSESSMENT METHOD 2: UNIVARIATE MODELS: OUTCOME (ID-3B) VAD AND COVARIATES}
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+lva_inclusion_data |> 
+  dplyr::select(infectious3, country, sex, agegroup_n2l, calc_location, lbwl, anyunder, anystunt, anywast, anymal)|> 
+  tbl_uvregression(
+    method = glm,
+    y = infectious3,
+    method.args = list(family = binomial),
+    exponentiate = TRUE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 2)
+  ) |> 
+  add_global_p() |>  # add global p-value
+  add_nevent() |>  # add number of events of the outcome
+  add_q() |>  # adjusts global p-values for multiple testing
+  bold_p()|>  # bold p-values under a given threshold (default 0.05)
+  bold_p(t = 0.10, q = TRUE)|>  # now bold q-values under the threshold of 0.10
+  bold_labels()
+
+
+```
+
+
+
+```{r FINAL MODELS 3/17/2023 with 3A}
+
+m1<-glm(infectious1 ~ lva3lvl_nd, 
+       data=lva_inclusion_data,
+       family = binomial())
+
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+
+m2<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l+ sex,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m2)
+tbl_regression(m2, exponentiate=TRUE)
+
+m2inteval<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l + lva3lvl_nd*sex, 
+       data=lva_inclusion_data,
+       family = binomial())
+
+summary(m2inteval)
+tbl_regression(m2inteval, exponentiate=TRUE)
+
+
+m2females<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l ,
+     data=subset(lva_inclusion_data, sex == "Females"),
+       family = binomial())
+
+summary(m2females)
+tbl_regression(m2females, exponentiate=TRUE)
+
+
+m2males<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l  ,
+     data=subset(lva_inclusion_data, sex == "Males"),
+       family = binomial())
+
+summary(m2males)
+tbl_regression(m2males, exponentiate=TRUE)
+
+
+m8<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l + sex + anymal ,
+       data=lva_inclusion_data,
+       family = binomial())
+
+summary(m8)
+tbl_regression(m8, exponentiate=TRUE)
+
+m8inteval<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l + sex + anymal + sex*lva3lvl_nd,
+     data= lva_inclusion_data,
+       family = binomial())
+
+summary(m8inteval)
+tbl_regression(m8inteval, exponentiate=TRUE)
+
+m8females<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l + anymal,
+     data=subset(lva_inclusion_data, sex == "Females"),
+       family = binomial())
+
+summary(m8females)
+tbl_regression(m8females, exponentiate=TRUE)
+
+
+m8males<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l + anymal ,
+     data=subset(lva_inclusion_data, sex == "Males"),
+       family = binomial())
+
+summary(m8males)
+tbl_regression(m8males, exponentiate=TRUE)
+
+```
+
+
+```{r FINAL MODELS 3/13/2023 with 3B}
+
+
+m1<-glm(infectious3 ~ lva3lvl_nd, 
+       data=lva_inclusion_data,
+       family = binomial())
+
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+
+m2<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l+ sex,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m2)
+tbl_regression(m2, exponentiate=TRUE)
+
+m2inteval<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l + lva3lvl_nd*sex, 
+       data=lva_inclusion_data,
+       family = binomial())
+
+summary(m2inteval)
+tbl_regression(m2inteval, exponentiate=TRUE)
+
+
+m2females<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l ,
+     data=subset(lva_inclusion_data, sex == "Females"),
+       family = binomial())
+
+summary(m2females)
+tbl_regression(m2females, exponentiate=TRUE) 
+
+m2males<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l ,
+     data=subset(lva_inclusion_data, sex == "Males"),
+       family = binomial())
+
+summary(m2males)
+tbl_regression(m2males, exponentiate=TRUE) 
+
+
+m9<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l + sex + anymal ,
+       data=lva_inclusion_data,
+       family = binomial())
+
+summary(m9)
+tbl_regression(m9, exponentiate=TRUE)
+
+m9inteval<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l + sex + anymal + sex*lva3lvl_nd,
+     data= lva_inclusion_data,
+       family = binomial())
+
+summary(m9inteval)
+tbl_regression(m9inteval, exponentiate=TRUE)
+
+m9females<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l + anymal,
+     data=subset(lva_inclusion_data, sex == "Females"),
+       family = binomial())
+
+summary(m9females)
+tbl_regression(m9females, exponentiate=TRUE)
+
+
+m9males<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l + anymal ,
+     data=subset(lva_inclusion_data, sex == "Males"),
+       family = binomial())
+
+summary(m9males)
+tbl_regression(m9males, exponentiate=TRUE)
+
+```
+
+
+```{r Earlier analyses looking at interaction by stunting/wasting/underweight}
+#W/ All Infectious conditions
+m0<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anymal*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+m0<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anyunder*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+
+m0<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anystunt*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+
+m0<-glm(infectious1 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anywast*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+#W/ LRIs/Sepsis/ Diarrhea Infectious conditions
+m0<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anymal*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+m0<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anyunder*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+
+m0<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anystunt*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+
+m0<-glm(infectious3 ~ lva3lvl_nd + country + agegroup_n2l+ sex + anywast*lva3lvl_nd,
+        data=lva_inclusion_data,
+       family = binomial())
+
+summary(m0)
+tbl_regression(m0, exponentiate=TRUE)
+
+```
+
+
+```{r FIGURE 2- CONCISE}
+library(ggplot2)
+library(dplyr)
+library(paletteer)
+
+setwd("C:/Users/pmgupta/OneDrive - Emory University/One_Drive/publications/Dissertation Papers/Vitamin_A_Status_Association_with_Infectious_Mortality/0_0_key files")
+
+vad <- read.csv("vad_mar23_pmg.csv") %>%
+    
+    # sort models for plotting
+    mutate(model = factor(
+        model, levels = rev(c(
+            'Crude',
+            'Adjusted'
+            ))),
+        
+        strat = factor(strat, levels = rev(c(
+            "All", 
+            "Males", 
+            "Females"))),
+        
+        label = paste(sprintf('%.2f',or), " (", sprintf('%.2f',l.ci), ", ", sprintf('%.2f',u.ci), ")", sep=""),
+        
+        panel = ifelse(panel=='B. Death due to Lower Respiratory Infections, Sepsis, and Diarrheal Diseases',
+                       'B. Death due to Lower Respiratory Infections,\nSepsis, and Diarrheal Diseases',panel)) 
+
+
+# save as jpg
+jpeg('p2_mar23_pmg.jpg', 10.2, 3.8, unit='in', res=360)
+
+vad %>%
+    
+    ggplot()+
+    theme_light() +
+    
+    # dashed line at OR=1
+    geom_vline(xintercept = 1, linewidth=.4, linetype="dashed", color = "grey40") +
+    
+    # two panels
+    facet_wrap(~panel, ncol= 2, nrow=1, scales = "free_x") +
+    
+    # forest plot
+    geom_pointrange(
+        aes(
+            y = model, 
+            x = or,
+            xmin = l.ci,
+            xmax = u.ci,
+            color = strat
+        ),
+        position=position_dodge(width=.7),
+        size = .3,
+        fatten = 4.3,
+    ) +
+    
+    # add OR (95% CI) label
+    geom_text(
+        aes(
+            color = strat,
+            y = model,
+            label = label,
+            x = 33),
+        position=position_dodge(width=.7),
+        hjust = 1,
+        size = 2.6,
+        show.legend = F,
+        parse = F) +
+    
+    # label axes
+    labs(x="Odds of increased infectious disease mortality", y=" ", title=" ") +
+    
+    # add "OR (95% CI)" to both panels
+    annotate("text",
+             x = 22,
+             y = 2.25,
+             label = 'underline(bold("OR (95% CI)"))',
+             parse = TRUE,
+             size = 3.0
+    ) +
+    
+    # other plot theme stuff
+    theme(
+        
+        panel.border = element_rect(size=.2,color='black'),
+        strip.background = element_rect(fill = 'grey60',color="black"),
+        strip.text=element_text(size=8.2,face = "bold", color="white"),
+        
+        # add space between panels
+        panel.spacing = unit(5.3, "lines"),
+        plot.margin = unit(c(1,5,1,1), "lines"),
+        
+        axis.title=element_text(face='bold',size=9),
+        title=element_text(face='bold',size=8.5),
+        legend.title=element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size=8.5),
+        axis.text.x = element_text(size=8.5),
+        axis.text.y = element_text(face="bold",size=8.5),
+        
+    ) +
+    scale_color_manual(
+        values = rev(c("grey80", "grey50", "black")),
+        breaks = c("All", "Males", "Females")
+    ) +
+    coord_cartesian(clip = "off" ,xlim=c(0.3,10)) +
+    scale_x_log10()
+
+
+dev.off()
+
+ggplot(vad)
+
+
+
+```
+
+```{r FIGURE 2- DETAILED}
+library(ggplot2)
+library(dplyr)
+library(paletteer)
+
+setwd("C:/Users/pmgupta/OneDrive - Emory University/One_Drive/publications/Dissertation Papers/Vitamin_A_Status_Association_with_Infectious_Mortality/0_0_key files")
+
+vad <- read.csv("vad_mar23_pmg.csv") %>%
+    
+    # sort models for plotting
+    mutate(model = factor(
+        model, levels = rev(c(
+            'Crude',
+            'Adjusted'
+            ))),
+        
+        strat = factor(strat, levels = rev(c(
+            "All", 
+            "Males", 
+            "Females"))),
+        
+        label = paste(sprintf('%.2f',or), " (", sprintf('%.2f',l.ci), ", ", sprintf('%.2f',u.ci), ")", sep=""),
+        
+        panel = ifelse(panel=='B. Death due to Lower Respiratory Infections, Sepsis, and Diarrheal Diseases',
+                       'B. Death due to Lower Respiratory Infections,\nSepsis, and Diarrheal Diseases',panel)) 
+
+
+# save as jpg
+jpeg('p2_mar23_pmg.jpg', 10.2, 3.8, unit='in', res=360)
+
+vad %>%
+    
+    ggplot()+
+    theme_light() +
+    
+    # dashed line at OR=1
+    geom_vline(xintercept = 1, linewidth=.4, linetype="dashed", color = "grey40") +
+    
+    # two panels
+    facet_wrap(~panel, ncol= 2, nrow=1, scales = "free_x") +
+    
+    # forest plot
+    geom_pointrange(
+        aes(
+            y = model, 
+            x = or,
+            xmin = l.ci,
+            xmax = u.ci,
+            color = strat
+        ),
+        position=position_dodge(width=.7),
+        size = .3,
+        fatten = 4.3,
+    ) +
+    
+    # add OR (95% CI) label
+    geom_text(
+        aes(
+            color = strat,
+            y = model,
+            label = label,
+            x = 33),
+        position=position_dodge(width=.7),
+        hjust = 1,
+        size = 2.6,
+        show.legend = F,
+        parse = F) +
+    
+    # label axes
+    labs(x="Odds of increased infectious disease mortality", y=" ", title=" ") +
+    
+    # add "OR (95% CI)" to both panels
+    annotate("text",
+             x = 22,
+             y = 2.25,
+             label = 'underline(bold("OR (95% CI)"))',
+             parse = TRUE,
+             size = 3.0
+    ) +
+    
+    # other plot theme stuff
+    theme(
+        
+        panel.border = element_rect(size=.2,color='black'),
+        strip.background = element_rect(fill = 'grey60',color="black"),
+        strip.text=element_text(size=8.2,face = "bold", color="white"),
+        
+        # add space between panels
+        panel.spacing = unit(5.3, "lines"),
+        plot.margin = unit(c(1,5,1,1), "lines"),
+        
+        axis.title=element_text(face='bold',size=9),
+        title=element_text(face='bold',size=8.5),
+        legend.title=element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size=8.5),
+        axis.text.x = element_text(size=8.5),
+        axis.text.y = element_text(face="bold",size=8.5),
+        
+    ) +
+    scale_color_manual(
+        values = rev(c("grey80", "grey50", "black")),
+        breaks = c("All", "Males", "Females")
+    ) +
+    coord_cartesian(clip = "off" ,xlim=c(0.3,10)) +
+    scale_x_log10()
+
+
+dev.off()
+
+ggplot(vad)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# plot the forest plot
+
+vad %>%
+  ggplot() +
+  theme_light() +
+    # dashed line at OR=1
+    geom_vline(xintercept = 1, size=.4, linetype="dashed", color = "grey40") +
+  
+  # two panels
+  facet_wrap(~panel, nrow=1, strip.position = "top") +
+  
+    # forest plot
+    geom_pointrange(
+        aes(
+            y = model, 
+            x = or,
+            xmin = l.ci,
+            xmax = u.ci,
+            color = strat
+        ),
+        position=position_dodge(width=.7),
+        size = .3,
+        fatten = 4.3,
+    ) +
+    
+    # add OR (95% CI) label
+    geom_text(
+        aes(
+            color = strat,
+            y = model,
+            label = label,
+            x = 3.75),
+        position=position_dodge(width=.7),
+        hjust = 1,
+        size = 2.6,
+        show.legend = F,
+        parse = F) +
+
+    # label axes
+    labs(x="Odds of Infectious Disease Mortality",  y=" ") +#, title='Figure 2.') +
+
+    # add "OR (95% CI)" to both panels
+    annotate("text",
+             x = 13,
+             y = 3.5,
+             label = 'underline(bold("OR (95% CI)"))',
+             parse = TRUE,
+             size = 2.8
+    ) +
+    # other plot theme stuff
+    theme(
+        panel.border = element_rect(size=.2,color='black'),
+        strip.background = element_rect(fill = 'grey60',size=.3,color="black"),
+        strip.text=element_text(size=10,face = "bold", color="white"),
+        
+        # add space between panels
+        panel.spacing = unit(5.3, "lines"),
+        plot.margin = unit(c(1,5,1,1), "lines"),
+        
+        axis.title=element_text(face='bold',size=9),
+        title=element_text(face='bold',size=8.5),
+        legend.title=element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size=8.5),
+        axis.text.x = element_text(size=8.5),
+        axis.text.y = element_text(face="bold",size=8.5)) +
+    scale_color_manual(
+    values = rev(c("grey80", "grey50", "black")),
+    breaks = c("All", "Males", "Females")) +
+    scale_x_log10() 
+dev.off()
+
+```
