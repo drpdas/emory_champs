@@ -1,0 +1,1535 @@
+---
+title: "final aim"
+author: "Priya Mehta-Gupta Das"
+date: "2023-10-15"
+output: html_document
+---
+
+```{r setting up the environment, eval = F, include = F, echo = F, warning = F, message = F, results = F}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!("pacman" %in% installed.packages()[,"Package"])) {
+  install.packages("pacman", dependencies = TRUE)
+}
+library(pacman)
+
+rm(list = ls())
+gc()
+
+path<-("/Users/priyamgdas/Library/CloudStorage/OneDrive-EmoryUniversity/Dissertation Files/Manuscripts/Aim 2- Discordance between anthropometric malnutrition and fatal malnutrition/0 - Data & Analysis Plan/CSV data") 
+```
+
+
+```{loading packages, eval = F, include = F, echo = F, warning = F, message = F, results = F}
+options(kableExtra.latex.load_packages = T)
+options(knitr.duplicate.label = 'allow')
+
+packages <- c("anthro", "knitr", "kableExtra", "readxl", "tringr", "tidyr", "haven", "ggplot2", "cowplot", "gridExtra", "grid","purrr", "lme4","lmerTest", "broom.mixed","DescTools","data.table", 
+"survey", "metafor", "plotrix", "BRINDA", "jtools", "forcats","tibble", "readr", "Hmisc", "rms", "dplyr", "devtools", "Table1", "lessR", "gtsummary")
+
+lapply(packages, require, character.only = TRUE)
+```
+
+
+```{r calling in analytic dataset - dated october 25, 2023, echo = FALSE, warning = FALSE, message = FALSE}
+#LOAD CSV FILE
+dt1<- read.csv(file = paste(path, "Analytics_Dataset_2023-12-31_17-53-18.csv", sep = "/")) # December 31, 2023 file @ 6PM 
+head(dt1)
+sapply(dt1,class)
+
+colnames(dt1) <- tolower(colnames(dt1))
+```
+
+
+```{r selecting key variables, echo = FALSE, warning = FALSE, message = FALSE}
+dt2<- dt1|> 
+  dplyr::select(
+                              
+                #analytic variables
+                champsid, site_name, 
+                catchmentid, 
+                age_group, case_type_calc,
+                case_type_dpf_flag, 
+                calc_sex, 
+                calc_dob, calc_tob, 
+                calc_dod, calc_tod, 
+                
+                ga_maternal_months, 
+                ga_child_months, 
+                ga_child_method, 
+                
+                bw_maternal, bw_child, 
+                
+                calc_location, 
+                pregnancycomplications, 
+                laborcomplications, 
+                childcomplications, 
+                mits_flag, 
+                mits_date,
+                mits_time, 
+                calc_postmortem_hrs, 
+    
+                #anthropometry
+                height_cm, 
+                weight_kg, 
+                muac_cm, 
+                head_circumf_cm,
+                calc_waz, 
+                calc_whz, 
+                calc_haz, 
+                calc_hz_z, 
+                calc_muac_z, 
+    
+                #causes of death - group designation and ICD-10 code variables - 1 ic, 1 uc, 8 mc, 10 osc
+                ic_champs_group_desc, 
+                immediate_cod,
+                
+                uc_champs_group_desc, 
+                underlying_cause_calc,
+                
+                morbid_cond_01_champs_group_desc,
+                morbid_condition_01,
+                morbid_cond_02_champs_group_desc,
+                morbid_condition_02,
+                morbid_cond_03_champs_group_desc,
+                morbid_condition_03,
+                morbid_cond_04_champs_group_desc,
+                morbid_condition_04,
+                morbid_cond_05_champs_group_desc,
+                morbid_condition_05,
+                morbid_cond_06_champs_group_desc,
+                morbid_condition_06,
+                morbid_cond_07_champs_group_desc,
+                morbid_condition_07,
+                morbid_cond_08_champs_group_desc,
+                morbid_condition_08,
+                
+                other_significant_condition_01,
+                other_significant_condition_02,
+                other_significant_condition_03,
+                other_significant_condition_04,
+                other_significant_condition_05,
+                other_significant_condition_06,
+                other_significant_condition_07,
+                other_significant_condition_08,
+                other_significant_condition_09,
+                other_significant_condition_10,
+                
+                count_of_causal_conditions,
+                
+                #filters variables
+                embargoed_record,
+                sensitive_case,                    
+                publication_suspended,
+                m00014,
+                m00015,
+                m00020,
+                m00021,
+                m00023,
+                m00024,
+                m00034,
+                m00041,
+                m00060,
+                
+                hiv_infected,
+                hiv_exposure,
+                
+                preventable,
+                preventablerecommend) 
+```
+
+
+```{r renaming key variables, echo = FALSE, warning = FALSE, message = FALSE}
+dt3<-dt2|> 
+dplyr::rename(  ##DOB and DOD
+                dob = calc_dob,
+                dod = calc_dod,
+                
+                #time to mits
+                mitshrs = calc_postmortem_hrs,
+  
+                ## anthropometry
+                ht = height_cm, 
+                wt = weight_kg, 
+                ac = muac_cm, 
+                hc = head_circumf_cm,
+                
+                #gestational age
+                ga_m = ga_maternal_months, 
+                ga_c = ga_child_months,
+              
+               #immediate and underlying causes of death
+                ic = ic_champs_group_desc, 
+                ic_icd10 = immediate_cod, 
+               
+                uc = uc_champs_group_desc, 
+                uc_icd10= underlying_cause_calc,
+               
+                #morbid causes of death
+                mc1 = morbid_cond_01_champs_group_desc,
+                mc1_icd10 = morbid_condition_01,
+                
+                mc2 = morbid_cond_02_champs_group_desc,
+                mc2_icd10 = morbid_condition_02,
+                
+                mc3 = morbid_cond_03_champs_group_desc,
+                mc3_icd10 = morbid_condition_03,
+               
+                mc4 = morbid_cond_04_champs_group_desc,
+                mc4_icd10 = morbid_condition_04,
+                
+                mc5 = morbid_cond_05_champs_group_desc,
+                mc5_icd10 = morbid_condition_05,
+                
+                mc6 = morbid_cond_06_champs_group_desc,
+                mc6_icd10 = morbid_condition_06,
+                
+                mc7 = morbid_cond_07_champs_group_desc,
+                mc7_icd10 = morbid_condition_07,
+                
+                mc8 = morbid_cond_08_champs_group_desc,
+                mc8_icd10 = morbid_condition_08,
+                
+                #other significant contributor of death
+                osc1_icd10 = other_significant_condition_01,
+                osc2_icd10 = other_significant_condition_02,
+                osc3_icd10 = other_significant_condition_03,
+                osc4_icd10 = other_significant_condition_04,
+                osc5_icd10 = other_significant_condition_05,
+                osc6_icd10 = other_significant_condition_06,
+                osc7_icd10 = other_significant_condition_07,
+                osc8_icd10 = other_significant_condition_08,
+                osc9_icd10 = other_significant_condition_09,
+                osc10_icd10 = other_significant_condition_10,
+                
+                hivexp = hiv_exposure, 
+                hivinf = hiv_infected,
+                numb_cc = count_of_causal_conditions,
+               
+                prevent = preventable,
+                preventrec = preventablerecommend)           
+```
+
+
+```{r creating variables for WHO Z score package, echo = FALSE, warning = FALSE, message = FALSE}
+library("dplyr")
+dt4 <- dt3 |> 
+  mutate(sex = as.factor(dplyr::case_when(calc_sex == "CH00030" ~ "M", 
+                                          calc_sex == "CH00031" ~ "F")), 
+         
+         sexn = (dplyr::case_when(sex == "M" ~ 1, 
+                                  sex ==  "F" ~ 2)), 
+         
+         dod = as.Date(dod), 
+         
+         dob = as.Date(dob),   
+         
+         #calculate_age = interval(ymd(dob), ymd(dod))),
+         
+         age_d = as.numeric(abs(dod - dob)),
+         #age_d2 = difftime(dod, dob, unit="days"),
+         
+         age_m = as.numeric(abs(floor((dod - dob)/30.4375))),
+         #age_m2 = ((as.period(interval(start = dob, end = dod))$year)*12 +(as.period(interval(start = dob, end = dod))$month)), 
+
+         htlg = ht, 
+         wt = wt, 
+         muac = ac, 
+         hc = hc)
+```
+
+
+```{r run WHO Z-score package, echo = FALSE, warning = FALSE, message = FALSE}
+dt5 <- with(dt4, 
+            anthro::anthro_zscores(
+              sex = sexn, 
+              age = age_d, 
+              is_age_in_month = FALSE,
+              weight = wt, 
+              lenhei = htlg,
+              headc = hc, 
+              armc = muac))
+```
+
+
+```{r bind z scores, echo = FALSE, warning = FALSE, message = FALSE}
+dt6 <- cbind(dt5, dt4) 
+```
+
+
+```{r defining covariates: age categories 3 and 6 level}
+dt7<-dt6 |> 
+  dplyr::mutate(
+    # 6 categories for age group
+    agegroup_n1    = dplyr::case_when(age_group == "CH00716" ~ 1,
+                                      age_group == "CH01404" ~ 2,
+                                      age_group == "CH01405" ~ 3,
+                                      age_group == "CH01406" ~ 4,
+                                      age_group == "CH00718" ~ 5,
+                                      age_group == "CH00719" ~ 6),
+   
+    # 3 categories for age group
+    agegroup_n2    = dplyr::case_when( agegroup_n1 == 1 | agegroup_n1 == 2 ~ 1,
+                                       agegroup_n1 == 3 | agegroup_n1 == 4 ~ 2,
+                                       agegroup_n1 == 5 | agegroup_n1 == 6 ~ 3),
+    
+     # age in months categories
+    agecat_m    = dplyr::case_when(age_m > 0 & age_m <= 5 ~ 1,
+                                    age_m >= 6 & age_m <= 11 ~  2,
+                                    age_m >= 12 & age_m <= 23 ~  3,
+                                    age_m >= 24 & age_m <= 59 ~  4),
+    # creating labels
+    agegroup_n1l = factor(agegroup_n1, 
+                 levels = c(1, 2, 3, 4, 5, 6), 
+                 labels = c("Stillbirth", "Deaths in first 24 hours", "Early Neonate (1-6 days)", "Late Neonate (7-<28 days)", "Infants", "Children")),
+    
+    agegroup_n1l = factor(agegroup_n2, 
+                 levels = c(1,2,3), 
+                 labels = c("Stillbirths and Deaths within 24 hours", "Neonates", "Infants and Children")),
+    
+     agecat_ml = factor(agecat_m, 
+                 levels = c(1, 2, 3, 4), 
+                 labels = c("1-5 months", "6-11 months", "12-23 months", "24-59 months")))
+```
+
+
+```{r defining anthropometric malnutirtion as dichotomous or ordinal, message=FALSE, warning=FALSE, confounders, outcome, echo=FALSE}
+dt8 <- dt7|>
+  dplyr::mutate(
+### Exposure variables ----
+#biologically plausible values with extended lower limit
+  #stunt = ifelse(zlen >= -10 & zlen < -2, 1, 0),
+  zlen = ifelse(zlen < -10, NA, zlen),
+  zlen = ifelse(zlen > 6, NA, zlen),
+
+  #wast =ifelse(zwfl >= -10 & zwfl < -2, 1, 0),
+  zwfl = ifelse(zwfl < -10, NA, zwfl),
+  zwfl = ifelse(zwfl > 5, NA, zwfl),
+
+  #undwei =ifelse(zwei >= -10 & zwei < -2, 1, 0),
+  zwei = ifelse(zwei < -10, NA, zwei),
+  zwei = ifelse(zwei > 5, NA, zwei),
+
+  #samac =ifelse(zac >= -10 & zac < -2, 1, 0),
+  zac = ifelse(zac < -10, NA, zac),
+  zac = ifelse(zac > 5, NA, zac),
+
+##### Dichotomous versions of underweight, stunting, wasting ----
+  stunt = ifelse(zlen >= -10 & zlen < -2, 1, 0),
+  wast =ifelse(zwfl >= -10 & zwfl < -2, 1, 0),
+  undwei =ifelse(zwei >= -10 & zwei < -2, 1, 0),
+  samac =ifelse(zac >= -10 & zac < -2, 1, 0),
+
+##### Multi-level versions of underweight, stunting, wasting ----
+  stuntcat = case_when(#zlen > 6 & zlen <= 100 ~ 99,# UL BIV
+                       zlen >= -1 & zlen <= 6 ~ 1, # none
+                       zlen >= -2 & zlen < -1 ~ 2,# mild
+                       zlen >= -3 & zlen < -2 ~ 3,# moderate
+                       zlen >= -10 & zlen < -3 ~ 4),# severe
+                       #zlen < -100 & zac < -10 ~ 999),# LL BIV
+  
+  wastcat = case_when(#zwfl > 5 & zwfl <= 100 ~ NA,# UL BIV
+                      zwfl >= -1 & zwfl <= 5 ~ 1,# none
+                      zwfl >= -2 & zwfl < -1 ~ 2,# mild
+                      zwfl >= -3 & zwfl < -2 ~ 3,# moderate
+                      zwfl >= -10 & zwfl < -3 ~ 4),# severe
+                      #zwfl < -10  ~ NA),# LL BIV
+
+  undweicat = case_when(#zwei > 5 & zwei <= 100 ~ 0,# UL BIV
+                      zwei >= -1 & zwei <= 5 ~ 1,# none
+                      zwei >= -2 & zwei < -1 ~ 2,# mild
+                      zwei >= -3 & zwei < -2 ~ 3,# moderate
+                      zwei >= -10 & zwei < -3 ~ 4),# severe
+                      #zwei < -10 ~ NA),# LL BIV
+
+  zaccat = case_when(#zac > 6 & zac <= 100 ~ NA,# UL BIV
+                       zac >= -1 & zac <= 5 ~ 1, # none
+                       zac >= -2 & zac < -1 ~ 2,# mild
+                       zac >= -3 & zac < -2 ~ 3,# moderate
+                       zac >= -10 & zac < -3 ~ 4),# severe
+                       #zac < -10 & zac <= -100 ~ NA),# LL BIV
+#creating labels
+    stuntl = factor(stunt, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    
+    wastl = factor(wast, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+
+    undweil = factor(undwei, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+
+    samacl = factor(samac, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+
+    stuntcatl = factor(stuntcat, 
+                 levels = c(1,2,3,4), 
+                 labels = c("None", "Mild", "Moderate", "Severe")),
+    
+    wastcatl = factor(wastcat, 
+                 levels = c(1,2,3,4), 
+                 labels = c("None", "Mild", "Moderate", "Severe")),
+
+   undweicatl = factor(undweicat, 
+                 levels = c(1,2,3,4), 
+                 labels = c("None", "Mild", "Moderate", "Severe")),
+
+    zaccatl = factor(zaccat, 
+                     levels = c(1,2,3,4), 
+                     labels = c("None", "Mild", "Moderate", "Severe")))
+```
+
+
+```{r examining various definitions of any malnutrition, message=FALSE, warning=FALSE, confounders, outcome, echo=FALSE}
+dt9 <- dt8|>
+  dplyr::mutate(
+#including underweight and zac 
+# any mild-severe
+  anymal4 = case_when( zlen < -1 |  zwei < -1 | zwfl < -1 | zac < -1 ~ 1, 
+                       is.na(zlen) & is.na(zwei) & is.na(zwfl)  & is.na(zac)~ NA_real_,
+                       TRUE ~ 0,),
+# any mod-severe *** 
+  anymal5 = case_when( zlen < -2 |  zwei < -2 | zwfl < -2  | zac < -2 ~ 1, 
+                       is.na(zlen) & is.na(zwei) & is.na(zwfl)  & is.na(zac)~ NA_real_,
+                       TRUE ~ 0,),
+# any severe   
+  anymal6 = case_when( zlen < -3 |  zwei < -3 | zwfl < -3  | zac < -3 ~ 1, 
+                      is.na(zlen) & is.na(zwei) & is.na(zwfl)  & is.na(zac)~ NA_real_,
+                      TRUE ~ 0),
+
+#creating labels
+#any malnutrition 4-6
+anymal4l = factor(anymal4, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+anymal5l = factor(anymal5, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+anymal6l = factor(anymal6, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")))
+```  
+
+
+```{r defining subset variables and potential confounders: hiv exposure and infection, echo = FALSE, warning = FALSE, message = FALSE}
+dt10 <- dt9 |> 
+  dplyr::mutate(
+  
+    age159 = case_when(age_m > 0  & age_m <= 59 ~'1-59 months'),
+    
+    hiv_exp = ifelse(hivexp == 1 , 1, 0),
+  
+    hiv_inf = case_when(is.na(hivinf) ~ "Unknown/Did not test",
+                      hivinf == 1 ~ "Positive",
+                      hivinf == 0 ~ "Negative"))
+```
+
+
+```{r defining covariates: any wasting/stunting/malnutrition}
+dt11<-dt10 |> 
+  dplyr::mutate(    
+    #revised code to define UL and LL for z-score indicators
+    #UL uses WHO UL, LL is based on descriptive analyses Priya and Ashka ran - duplicate code (11/1/23)
+    anyunder = dplyr::case_when(zwei >= -10 & zwei < -2 ~1,
+                        zwei >= -1 & zwei < 5 ~ 0),
+    
+    anywast = dplyr::case_when(zwfl >= -10 & zwfl < -1 ~1,
+                        zwfl >= -1 & zwfl < 5 ~ 0),
+    
+    anyzac = dplyr::case_when(zac >= -10 & zac < -1 ~ 1,
+                         zac >= -1 & zac < 6 ~ 0),
+    
+    anystunt = dplyr::case_when(zlen >= -10 & zlen < -1 ~ 1,
+                         zlen >= -1 & zlen < 6 ~ 0),
+    
+    #creating labels
+    anyunderl = factor(anyunder, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    anyzacl = factor(anyzac, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    anywastl = factor(anywast, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")),
+    anystuntl = factor(anystunt, 
+                 levels = c(1,0), 
+                 labels = c("Yes", "No")))
+    #checks
+table(dt11$anyunder,dt11$anyunder, useNA = "always")
+table(dt11$anyzac,dt11$anyzacl, useNA = "always")
+table(dt11$anywast,dt11$anywastl, useNA = "always")
+table(dt11$anystunt,dt11$anystuntl, useNA = "always")
+```
+
+
+```{r creating additional subset variables: BW/LBW/VLBW, Gestational age assumptions/PTB}
+dt12<-dt11 |> 
+    dplyr::mutate(        
+    bw_m = as.numeric(bw_maternal),
+        
+    bw_c = as.numeric(bw_child),
+    
+    #make sure weight is in the same units as bw - convert from kg to g
+    wt_g = (wt*1000),
+ 
+    bw_0 = dplyr:: case_when(is.na(bw_m) & is.na(bw_c) ~ 0,
+                             is.na(bw_m & !is.na(bw_c)) ~ 1,
+                             !is.na(bw_m) & is.na(bw_c) ~ 2,
+                             !is.na(bw_m) & !is.na(bw_c) ~ 3,
+                             bw_m >= bw_c ~ 4,
+                             bw_m >= bw_c ~ 5),
+    
+    bw = dplyr::case_when(
+#assuming if stillbirth or death in first 24 hours, bw = weight at death unless present in clinical abstraction files (child or maternal)
+                   (agegroup_n2 == 1 & is.na(bw_c) == T & is.na(bw_m)) == T ~ wt_g,
+                   (agegroup_n2 == 1 & is.na(bw_c) == F & is.na(bw_m)) == T ~ bw_c,
+                   (agegroup_n2 == 1 & is.na(bw_c) == T & is.na(bw_m)) == F ~ bw_m,
+                   (agegroup_n2 == 1 & (is.na(bw_c) == F & is.na(bw_m) == F) & (bw_c <= bw_m)) ~ bw_c,
+                   (agegroup_n2 == 1 & (is.na(bw_c) == F & (is.na(bw_m) == F) & (bw_c > bw_m))) ~ bw_m,
+                   
+#assuming neonatal bw = lowest weight present in clinical abstraction files (child or maternal) 
+                   (agegroup_n2 == 2 & is.na(bw_c) == T & is.na(bw_m)) == T ~ NA_real_,
+                   (agegroup_n2 == 2 & is.na(bw_c) == F & is.na(bw_m)) == T ~ bw_c,
+                   (agegroup_n2 == 2 & is.na(bw_c) == T & is.na(bw_m)) == F ~ bw_m,
+                   (agegroup_n2 == 2 & (is.na(bw_c) == F & is.na(bw_m) == F & (bw_c <= bw_m))) ~ bw_c,
+                   (agegroup_n2 == 2 & (is.na(bw_c) == F & (is.na(bw_m) == F) & (bw_c > bw_m))) ~ bw_m,
+                   
+#assuming infant or child bw = lowest weight present in clinical abstraction files (child or maternal)  
+                   (agegroup_n2 == 3 & is.na(bw_c) == T & is.na(bw_m)) == T ~ NA_real_,
+                   (agegroup_n2 == 3 & is.na(bw_c) == F & is.na(bw_m)) == T ~ bw_c,
+                   (agegroup_n2 == 3 & is.na(bw_c) == T & is.na(bw_m)) == F ~ bw_m,
+                   (agegroup_n2 == 3 & is.na(bw_c) == F & is.na(bw_m) == F & (bw_c <= bw_m)) ~ bw_c,
+                   (agegroup_n2 == 3 & (is.na(bw_c) == F & (is.na(bw_m) == F) & (bw_c > bw_m))) ~ bw_m),
+    
+                    bw_nm = if_else(!is.na(bw), 1, 0),
+    
+                    lbw = if_else(bw<2500,1,0),
+
+                    vlbw = if_else(bw<1500, 1, 0),
+#gestational age
+    ga_m = as.numeric(ga_m),
+        
+    ga_c = as.numeric(ga_c),
+    
+    ga_0 = dplyr:: case_when(is.na(ga_m) & is.na(ga_c) ~ 0,
+                             is.na(ga_m & !is.na(ga_c)) ~ 1,
+                             !is.na(ga_m) & is.na(ga_c) ~ 2,
+                             !is.na(ga_m) & !is.na(ga_c) ~ 3,
+                             ga_m >= ga_c ~ 4,
+                             ga_m >= ga_c ~ 5),
+    
+    ga = dplyr::case_when(
+#for stillbirths and deaths in the first 24 hours assume the following for gestational age
+                   (agegroup_n2 == 1 & is.na(ga_c) == T & is.na(ga_m)) == T ~ NA_real_,
+                   (agegroup_n2 == 1 & is.na(ga_c) == F & is.na(ga_m)) == T ~ ga_c,
+                   (agegroup_n2 == 1 & is.na(ga_c) == T & is.na(ga_m)) == F ~ ga_m,
+                   (agegroup_n2 == 1 & (is.na(ga_c) == F & is.na(ga_m) == F) & (ga_c <= ga_m)) ~ ga_c,
+                   (agegroup_n2 == 1 & (is.na(ga_c) == F & (is.na(ga_m) == F) & (ga_c > ga_m))) ~ ga_m,
+                   
+#for neonates assume the following for gestational age
+                   (agegroup_n2 == 2 & is.na(ga_c) == T & is.na(ga_m)) == T ~ NA_real_,
+                   (agegroup_n2 == 2 & is.na(ga_c) == F & is.na(ga_m)) == T ~ ga_c,
+                   (agegroup_n2 == 2 & is.na(ga_c) == T & is.na(ga_m)) == F ~ ga_m,
+                   (agegroup_n2 == 2 & (is.na(ga_c) == F & is.na(ga_m) == F & (ga_c <= ga_m))) ~ ga_c,
+                   (agegroup_n2 == 2 & (is.na(ga_c) == F & (is.na(ga_m) == F) & (bw_c > ga_m))) ~ ga_m,
+                   
+#for infants and children assume the following for gestational age
+                   (agegroup_n2 == 3 & is.na(ga_c) == T & is.na(ga_m)) == T ~ NA_real_,
+                   (agegroup_n2 == 3 & is.na(ga_c) == F & is.na(ga_m)) == T ~ ga_c,
+                   (agegroup_n2 == 3 & is.na(ga_c) == T & is.na(ga_m)) == F ~ ga_m,
+                   (agegroup_n2 == 3 & is.na(ga_c) == F & is.na(ga_m) == F & (ga_c <= ga_m)) ~ ga_c,
+                   (agegroup_n2 == 3 & (is.na(ga_c) == F & (is.na(ga_m) == F) & (ga_c > ga_m))) ~ ga_m),
+    
+                    ga_nm = if_else(!is.na(ga), 1, 0),
+    
+                    ptb = if_else(ga < 37 , 1 , 0),
+                    #ptb_ic = if_else(ic == "Neonatal preterm birth complications" , 1 , 0),
+                   # ptb_uc = if_else(uc == "Neonatal preterm birth complications" , 1 , 0),
+
+#creating labels
+          ptbl = factor(ptb, 
+                       levels = c(1,0), 
+                       labels = c("Preterm", "No")),
+          lbwl = factor(lbw, 
+                       levels = c(1,0), 
+                       labels = c("Low birthweight", "No")),
+          vlbwl = factor(vlbw, 
+                       levels = c(1,0), 
+                       labels = c("Very low birthweight", "No")))
+```
+
+
+```{r SGA standard using INTERGROWTH-21st -part 1, echo = FALSE, warning = FALSE, message = FALSE}
+csex <- c(rep(1, 19), rep(2, 19))
+gagehx_wks <- c(24:42, 24:42) # code credit to Hanqi/BRINDA
+c10 <- 1000*c(
+  # boys
+  0.50, 0.57, 0.65, 0.74, 0.84, 0.95, 1.07, 1.21, 1.36, 1.43, 1.71, 1.95, 2.18, 2.38, 2.57, 2.73, 2.88,    3.01, 3.12,
+  # girls
+  0.47, 0.54, 0.61, 0.70, 0.79, 0.90, 1.01, 1.14, 1.28, 1.41, 1.68, 1.92, 2.14, 2.33, 
+  2.50, 2.65, 2.78, 2.89, 2.98)
+```
+
+
+```{r SGA standard using INTERGROWTH-21st- part 2, echo = FALSE, warning = FALSE, message = FALSE}
+sga_standard <- data.frame(csex, gagehx_wks, c10) 
+
+# Merge the data frames based on the common columns (sex and gestational age)
+dt13 <- right_join(sga_standard, dt12, by = c('csex' = 'csex', 'gagehx_wks' = 'ga'), suffix = c('.sga', '.dt12'))|> 
+  mutate(sga = case_when(gagehx_wks < 43 ~ case_when(bw < c10 ~ 1,
+                                                     bw > c10 ~ 0,
+                                                     TRUE ~ NA_real_),
+                         gagehx_wks > 42 ~ case_when(sex == 1 ~ ifelse(bw < 3210, 1, 0),
+                                                     sex == 2 ~ ifelse(bw < 3040, 1, 0))
+  ))
+```
+
+
+```{r defining outcome variables (fatal malnutrition), echo = FALSE, warning = FALSE, message = FALSE}
+fatalmaln <- c("E40.0", "E40","E41","E42","E43","E44","E44.0","E44.1","E45","E46","B22.2")
+
+#ICD-10 Code details:
+#B22.2: HIV disease resulting in wasting syndrome
+#E40: Kwashiorkor
+#E41: Nutritional marasmus
+#E42: Marasmic kwashiorkor
+#E43: Unspecified severe protein-calorie malnutrition
+#E44: Protein-calorie malnutrition of moderate and mild degree
+#E44.0: Moderate protein-energy malnutrition
+#E44.1: Mild protein-calorie malnutrition
+#E45: Retarded development following protein-calorie malnutrition
+#E46: Unspecified protein-calorie malnutrition
+#t3_b20 <- c("B20")
+t3_b22.2 <- c("B22.2")
+t3_e40.0 <- c("E40.0")
+t3_e40 <- c( "E40")
+t3_e41 <- c("E41")
+t3_e42 <- c("E42")
+t3_e43 <- c("E43")
+t3_e44 <- c("E44")
+t3_e44.0 <- c("E44.0")
+t3_e44.1 <- c("E44.1")
+t3_e45 <- c("E45")
+t3_e46 <- c("E46")
+
+
+#expanded definition of preterm birth - neonatal preterm birth complications
+nptbc<-c("P07.0","P07.1","P07.14","P07.15","P07.18","P07.2","P07.3","P22", "P22.0","P22.9","P25.1","P26", "P26.8", "P26.9","P27.1", "P28.0")
+
+#presence of ICD-10 code in part 1 and 2
+cols_p12 <- c("ic_icd10", 
+              "uc_icd10", 
+              "mc1_icd10", "mc2_icd10", "mc3_icd10", "mc4_icd10", "mc4_icd10", "mc5_icd10", "mc6_icd10", "mc7_icd10", "mc8_icd10", 
+              "osc1_icd10", "osc2_icd10", "osc3_icd10", "osc4_icd10", "osc5_icd10", "osc6_icd10", "osc7_icd10", "osc8_icd10", "osc9_icd10",
+              "osc10_icd10")
+cols_p1 <- c("ic_icd10", 
+              "uc_icd10", 
+              "mc1_icd10", "mc2_icd10", "mc3_icd10", "mc4_icd10", "mc4_icd10", "mc5_icd10", "mc6_icd10", "mc7_icd10", "mc8_icd10")
+cols_p2 <- c("osc1_icd10", "osc2_icd10", "osc3_icd10", "osc4_icd10", "osc5_icd10", "osc6_icd10", "osc7_icd10", "osc8_icd10", "osc9_icd10",
+              "osc10_icd10")
+t3_ic <- c("ic_icd10")
+t3_uc <- c("uc_icd10")
+t3_mc <- c("mc1_icd10", "mc2_icd10", "mc3_icd10", "mc4_icd10", "mc4_icd10", "mc5_icd10", "mc6_icd10", "mc7_icd10", "mc8_icd10")
+t3_osc <- c("osc1_icd10", "osc2_icd10", "osc3_icd10", "osc4_icd10", "osc5_icd10", "osc6_icd10", "osc7_icd10", "osc8_icd10", "osc9_icd10", "osc10_icd10")
+
+dt14 <- dt13 |>
+  dplyr::mutate(fatlmaln_p12 = +(if_any(cols_p12, ~ . %in% fatalmaln)),
+         fatlmaln_p1 = +(if_any(cols_p1, ~ . %in% fatalmaln)),
+         fatlmaln_p2 = +(if_any(cols_p2, ~ . %in% fatalmaln)),
+         
+         ic_t3 = +(if_any(t3_ic, ~ . %in% fatalmaln)),
+         uc_t3 = +(if_any(t3_uc, ~ . %in% fatalmaln)),
+         mc_t3 = +(if_any(t3_mc, ~ . %in% fatalmaln)),
+         osc_t3 = +(if_any(t3_osc, ~ . %in% fatalmaln)),
+         
+        #icd_b20 = +(if_any(cols_p12, ~ . %in% t3_b20)),
+        icd_b22.2 = +(if_any(cols_p12, ~ . %in% t3_b22.2)),
+        icd_e40.0 = +(if_any(cols_p12, ~ . %in% t3_e40.0)),
+        icd_e40 = +(if_any(cols_p12, ~ . %in% t3_e40)),
+        icd_e41 = +(if_any(cols_p12, ~ . %in% t3_e41)),
+        icd_e42 = +(if_any(cols_p12, ~ . %in% t3_e42)),
+        icd_e43 = +(if_any(cols_p12, ~ . %in% t3_e43)),
+        icd_e44 = +(if_any(cols_p12, ~ . %in% t3_e44)),
+        icd_e44.0 = +(if_any(cols_p12, ~ . %in% t3_e44.0)),
+        icd_e44.1 = +(if_any(cols_p12, ~ . %in% t3_e44.1)),
+        icd_e45 = +(if_any(cols_p12, ~ . %in% t3_e45)),
+        icd_e46 = +(if_any(cols_p12, ~ . %in% t3_e46)),
+        
+        icd_ptb =  +(if_any(cols_p12, ~ . %in% nptbc)),
+        
+        preterm = dplyr::case_when(ptb == 1 | icd_ptb == 1 ~ 1, 
+                              ptb == 0 & icd_ptb == 0 ~ 0,
+                       TRUE ~ NA_real_))
+        
+        
+```
+
+
+```{r concordance/discordance variables, echo = FALSE, warning = FALSE, message = FALSE}
+dt15<-dt14%>% 
+  dplyr::mutate(
+        concordance = dplyr::case_when(anymal5 == 1 & fatlmaln_p12 == 1 ~ 1, 
+                              anymal5 == 1 & fatlmaln_p12 == 0 ~ 0,
+                       TRUE ~ NA_real_),
+        
+        concordance2 = dplyr::case_when(wast == 1 & fatlmaln_p12 == 1 ~ 1, 
+                              wast == 1 & fatlmaln_p12 == 0 ~ 0,
+                       TRUE ~ NA_real_),
+       
+        prevent_dicho = dplyr::case_when( prevent == " " ~ NA,
+                                          prevent == "Yes" ~ "Yes/Possible",
+                                          prevent == "Possible under certain circumstances" ~ "Yes/Possible",
+                                          prevent == "No" ~ "No",
+                                          prevent == "Non-Consensus" ~ NA))
+```
+
+
+```{r inclusion criteria, echo = FALSE, warning = FALSE, message = FALSE}
+#Infants and Children 1-59 months with no history of SGA/PTB/LBW
+dt16<-  dt15 %>%  #n = 12,351 obs 
+  dplyr::filter(sensitive_case == 0 & !is.na(sensitive_case))  %>%  #n = 6,536 obs
+  dplyr::filter(publication_suspended == 0 & !is.na(publication_suspended))  %>%  #n = 6,254 obs
+  
+  dplyr::filter(age_group == "CH00718" | age_group == "CH00719") %>% #n = 1,511 obs
+  dplyr::filter(mits_flag == 1)  %>%  #n = 1,459 MITS completed
+  dplyr::filter(m00060 == 1)  %>%  #n = 1,459 DeCoDed completed
+  
+  dplyr::filter(!is.na(champsid))  %>%  #n = 1,459 obs non - missing champsid
+  dplyr::filter(!is.na(age_m))  %>%  #n = 1,456 obs - non-missing age in months 
+  dplyr::filter(!is.na(sex))  %>%  #n = 1,456 obs - non-missing sex
+  dplyr::filter(!is.na(htlg))  %>%  #n = 1,454 obs - non - missing htlg -- (lost 2 obs)
+  dplyr::filter(!is.na(wt))  %>%  #n = 1,437 obs -- (lost additional 17 obs)
+  dplyr::filter(!is.na(age159 == 1)) %>% #n = 1,416 obs -- (lost additional 21 obs)
+  
+  dplyr::filter(sga == 0 | is.na(sga)) %>% #n = 1,416 obs
+  dplyr::filter(lbw == 0 | is.na(lbw)) %>% #n = 1,293 -- (lost additional 123 obs)
+  dplyr::filter(ptb == 0 | is.na(ptb)) %>%   #n = 1,281 -- (lost additional 12 obs)
+  dplyr::filter(champsid != "KEAA00334") %>% #n = 1,280 obs
+  dplyr::filter(site_name != "Bangladesh") #n = 1,273 obs
+
+#Infants and Children 1-59 months with complete data on anthropometric data
+dt17<-  dt15 %>%  #n = 12,351 obs 
+  dplyr::filter(sensitive_case == 0 & !is.na(sensitive_case))  %>%  #n = 6,536 obs
+  dplyr::filter(publication_suspended == 0 & !is.na(publication_suspended))  %>%  #n = 6,254 obs
+  
+  dplyr::filter(age_group == "CH00718" | age_group == "CH00719") %>% #n = 1,511 obs
+  dplyr::filter(mits_flag == 1)  %>%  #n = 1,459 MITS completed
+  dplyr::filter(m00060 == 1)  %>%  #n = 1,459 DeCoDed completed
+  
+  dplyr::filter(!is.na(champsid))  %>%  #n = 1,459 obs non - missing champsid
+  dplyr::filter(!is.na(age_m))  %>%  #n = 1,456 obs - non-missing age in months 
+  dplyr::filter(!is.na(sex))  %>%  #n = 1,456 obs - non-missing sex
+  dplyr::filter(!is.na(htlg))  %>%  #n = 1,454 obs - non - missing htlg -- (lost 2 obs)
+  dplyr::filter(!is.na(wt))  %>%  #n = 1,437 obs -- (lost additional 17 obs)
+  dplyr::filter(!is.na(age159 == 1)) %>% #n = 1,416 obs -- (lost additional 21 obs)
+  
+  dplyr::filter(champsid != "KEAA00334") %>% #n = 1,416 obs obs
+  dplyr::filter(site_name != "Bangladesh") #n = 1,406 obs
+```
+
+
+```{r - exclusions}
+#SS1: All Infants and Children 1-59 months (includes those with possible Hx of SGA/PTB/LBW)
+ss_1<-  dt15 %>%   #n = 12,351 obs and 195 vars 
+   dplyr::filter(sensitive_case == 0 & !is.na(sensitive_case))%>%  #n = 6,536 obs
+   dplyr::filter(publication_suspended == 0 & !is.na(publication_suspended))%>%  # n = 6,254 obs
+   dplyr::filter(mits_flag == 1)  %>%  #n = 6,111 (nearly 40% data loss) obs
+   dplyr::filter(m00060 == 1)  %>%  #n = 6,107 MITS and DeCoDe
+    
+    dplyr::filter(!is.na(champsid))  %>%  # n = 6,254 obs non - missing champsid
+    dplyr::filter(!is.na(age_m))  %>%  #n = 6,092 obs - non-missing age in months 
+    dplyr::filter(!is.na(sex))  %>%  #n = 6,077 obs - non-missing sex
+    dplyr::filter(!is.na(htlg))  %>%  #n = 6,063 obs - non - missing htlg -- (lost additional 14 obs)
+    dplyr::filter(!is.na(wt))  %>%  #n = 6,031 obs-- (lost additional 32 obs)
+    dplyr::filter(age_group == "CH00718" | age_group == "CH00719") %>% # 1,436 obs
+   
+  dplyr::filter(!is.na(age159 == 1)) %>% #n = 1,415 obs
+  dplyr::filter(champsid != "KEAA00334") %>% #n = 1,415 obs
+  dplyr::filter(site_name != "Bangladesh") %>% #n = 1405 obs
+  dplyr::select(champsid, site_name,mits_flag, mits_date, mits_time, mitshrs, age_d, agecat_ml,catchmentid, age_group, case_type_calc, case_type_dpf_flag, sex, calc_location,ht, wt, ac, hc, zlen,zwei,  zwfl, zhc,zac, fac, wast, wastl, wastcatl, stunt, stuntl, stuntcatl, undwei, undweil, undweicatl, samac, samacl, zaccat, zaccatl,  anymal4l, anymal5l, anymal6l, csex, gagehx_wks, c10,dob, calc_tob, dod, calc_tod, ga_m, ga_c,ga_child_method, bw_maternal, bw_child, bw, preterm, ptbl, lbwl, sga,numb_cc, prevent_dicho, fatlmaln_p12, fatlmaln_p1, fatlmaln_p2, cols_p12,cols_p1,cols_p2,pregnancycomplications, laborcomplications, childcomplications, concordance, concordance2)
+```
+
+
+```{r - creating analytic samples 1, 2, 3, and 4}
+#SS1: All Infants and Children 1-59 months (includes those with possible Hx of SGA/PTB/LBW)
+ss_1<-  dt15 %>%   #n = 12,351 obs and 195 vars 
+  dplyr::filter(sensitive_case == 0 & !is.na(sensitive_case))%>%  #n = 6,536 obs
+  dplyr::filter(publication_suspended == 0 & !is.na(publication_suspended))%>%  # n = 6,254 obs
+  dplyr::filter(!is.na(champsid))  %>%  # n = 6,254 obs non - missing champsid
+  dplyr::filter(!is.na(age_m))  %>%  #n = 6,239 obs - non-missing age in months 
+  dplyr::filter(!is.na(sex))  %>%  #n = 6,218 obs - non-missing sex
+  dplyr::filter(!is.na(htlg))  %>%  #n = 6,066 obs - non - missing htlg -- (lost additional 14 obs)
+  dplyr::filter(!is.na(wt))  %>%  #n = 6,034 obs-- (lost additional 32 obs)
+  dplyr::filter(age_group == "CH00718" | age_group == "CH00719") %>% # 1,436 obs
+  dplyr::filter(mits_flag == 1)  %>%  #n = 1,436 (nearly 40% data loss) obs
+  dplyr::filter(m00060 == 1)  %>%  #n = 1,436
+  dplyr::filter(!is.na(age159 == 1)) %>% #n = 1,415 obs
+  dplyr::filter(champsid != "KEAA00334") %>% #n = 1,415 obs
+  dplyr::filter(site_name != "Bangladesh") %>% #n = 1405 obs
+  dplyr::select(champsid, site_name,mits_flag, mits_date, mits_time, mitshrs, age_d, agecat_ml,catchmentid, age_group, case_type_calc, case_type_dpf_flag, sex, calc_location,ht, wt, ac, hc, zlen,zwei,  zwfl, zhc,zac, fac, wast, wastl, wastcatl, stunt, stuntl, stuntcatl, undwei, undweil, undweicatl, samac, samacl, zaccat, zaccatl,  anymal4l, anymal5l, anymal6l, csex, gagehx_wks, c10,dob, calc_tob, dod, calc_tod, ga_m, ga_c, gagehx_wks, ga_child_method, bw_maternal, bw_child, bw, preterm, ptbl, lbwl, sga,numb_cc, prevent_dicho, fatlmaln_p12, fatlmaln_p1, fatlmaln_p2, cols_p12,cols_p1,cols_p2,pregnancycomplications, laborcomplications, childcomplications, concordance, concordance2)
+
+
+#SS2: Infants and Children 1-59 months without Hx of SGA/PTB/LBW
+ss_2<-  dt15 %>%  
+  dplyr::filter(mits_flag == 1)  %>%  
+  dplyr::filter(m00060 == 1)  %>%  
+  dplyr::filter(sensitive_case == 0 & !is.na(sensitive_case))  %>% 
+  dplyr::filter(publication_suspended == 0 & !is.na(publication_suspended))  %>%  
+  
+  dplyr::filter(!is.na(champsid))  %>%  
+  dplyr::filter(!is.na(age_m))  %>% 
+  dplyr::filter(!is.na(sex))  %>%  
+  dplyr::filter(!is.na(htlg))  %>% 
+  dplyr::filter(!is.na(wt))  %>%  
+  
+  dplyr::filter(!is.na(age_group == "CH00718" | age_group == "CH00719")) %>% 
+  dplyr::filter(!is.na(age159 == 1)) %>% 
+  
+  dplyr::filter(sga == 0 | is.na(sga)) %>% 
+  dplyr::filter(lbw == 0 | is.na(lbw)) %>% 
+  dplyr::filter(ptb == 0 | is.na(ptb)) %>%   
+  dplyr::filter(champsid != "KEAA00334") %>% 
+  dplyr::filter(site_name!= "Bangladesh") %>% 
+  dplyr::select(champsid, site_name,mits_flag, mits_date, mits_time, mitshrs, age_d, agecat_ml,catchmentid, age_group, case_type_calc, case_type_dpf_flag,sex, calc_location,ht, wt, ac, hc, zlen,zwei,  zwfl, zhc,zac, fac, wast, wastl, wastcatl, stunt, stuntl, stuntcatl, undwei, undweil, undweicatl, samac, samacl, zaccat, zaccatl,  anymal4l, anymal5l, anymal6l, csex, gagehx_wks, c10,dob, calc_tob, dod, calc_tod, ga_m, ga_c, gagehx_wks, ga_child_method, bw_maternal, bw_child, bw, preterm, ptbl, lbwl, sga,numb_cc, prevent_dicho, fatlmaln_p12, fatlmaln_p1, fatlmaln_p2, cols_p12,cols_p1,cols_p2,pregnancycomplications, laborcomplications, childcomplications, concordance, concordance2) 
+  
+#SS3: Infants and Children 1-59 months with confirmed history of SGA/PTB/LBW - based on M or CH clinical gestational age 
+ss_3<-  dt15 %>%  #n = 11899 obs 
+  dplyr::filter(mits_flag == 1)  %>%  #n = 7,347 (nearly 40% data loss) obs
+  dplyr::filter(m00060 == 1)  %>%  #n = 6,316 obs
+  dplyr::filter(sensitive_case == 0 & !is.na(sensitive_case))  %>%  #n = 6,288 obs
+  dplyr::filter(publication_suspended == 0 & !is.na(publication_suspended))  %>%  #n = 6,107 obs
+  
+  dplyr::filter(!is.na(age_m))  %>%  #n = 6,092 obs - non-missing age in months -- (lost 15 obs)
+  dplyr::filter(age_group == "CH00718" | age_group == "CH00719") %>%  #n  = 6,092 obs
+  dplyr::filter(!is.na(age159 == 1)) %>% #n = 1,437
+  dplyr::filter(sga == 1 | lbw == 1 | ptb == 1) %>% #n=136 obs
+  dplyr::select(champsid, site_name,mits_flag, mits_date, mits_time, mitshrs, age_d, agecat_ml,catchmentid, age_group, case_type_calc, case_type_dpf_flag,sex, calc_location,ht, wt, ac, hc, zlen,zwei,  zwfl, zhc,zac, fac, wast, wastl, wastcatl, stunt, stuntl, stuntcatl, undwei, undweil, undweicatl, samac, samacl, zaccat, zaccatl,  anymal4l, anymal5l, anymal6l, csex, gagehx_wks, c10,dob, calc_tob, dod, calc_tod, ga_m, ga_c, gagehx_wks, ga_child_method, bw_maternal, bw_child, bw, preterm, ptbl, lbwl, sga,numb_cc, prevent_dicho, fatlmaln_p12, fatlmaln_p1, fatlmaln_p2, cols_p12,cols_p1,cols_p2,pregnancycomplications, laborcomplications, childcomplications, concordance, concordance2) 
+
+#SS4: Infants and Children 1-59 months with confirmed history of SGA/PTB/LBW--- expanded definition of PTB based on M or CH gestational age and "neonatal preterm complications noted in DC"
+ss_4<-  dt15 %>%  #n = 11899 obs 
+  dplyr::filter(mits_flag == 1)  %>%  #n = 7,347 (nearly 40% data loss) obs
+  dplyr::filter(m00060 == 1)  %>%  #n = 6,316 obs
+  dplyr::filter(sensitive_case == 0 & !is.na(sensitive_case))  %>%  #n = 6,288 obs
+  dplyr::filter(publication_suspended == 0 & !is.na(publication_suspended))  %>%  #n = 6,107 obs
+  
+  dplyr::filter(!is.na(age_m))  %>%  #n = 6,092 obs - non-missing age in months -- (lost 15 obs)
+  dplyr::filter(!is.na(age_group == "CH00718" | age_group == "CH00719")) %>%  #n  = 6,092 obs
+  dplyr::filter(!is.na(age159 == 1)) %>% #n = 1,437 
+  dplyr::filter(sga == 1 | lbw == 1 | preterm == 1| ptb == 1) %>% #n=182 obs
+  dplyr::select(champsid, site_name,mits_flag, mits_date, mits_time, mitshrs, age_d, agecat_ml,catchmentid, age_group, case_type_calc, case_type_dpf_flag,sex, calc_location,ht, wt, ac, hc, zlen,zwei,  zwfl, zhc,zac, fac, wast, wastl, wastcatl, stunt, stuntl, stuntcatl, undwei, undweil, undweicatl, samac, samacl, zaccat, zaccatl,  anymal4l, anymal5l, anymal6l, csex, gagehx_wks, c10,dob, calc_tob, dod, calc_tod, ga_m, ga_c, gagehx_wks, ga_child_method, bw_maternal, bw_child, bw, preterm, ptbl, lbwl, sga,numb_cc, prevent_dicho, fatlmaln_p12, fatlmaln_p1, fatlmaln_p2, cols_p12,cols_p1,cols_p2,pregnancycomplications, laborcomplications, childcomplications, concordance, concordance2) 
+
+table(ss_3$ptb, useNA = "always")
+table(ss_3$lbw, useNA = "always")
+table(ss_3$sgs, useNA = "always")
+
+table(ss_4$preterm, useNA = "always")
+table(ss_3$lbw, useNA = "always")
+```
+
+
+```{r calling in decode and va part 2 files - dated december 4, 2023, echo = FALSE, warning = FALSE, message = FALSE}
+#LOAD CSV FILE
+decode<- read.csv(file = paste(path, "DecodePanelFindings_2023-12-31_17-52-46.csv", sep = "/")) 
+head(decode)
+sapply(decode,class)
+colnames(decode) <- tolower(colnames(decode))
+
+decode<- decode[,c("champsid","panelcomments","preventabledescribe","publichealthactionnotes","followupnotes")]
+head(decode)
+
+va<- read.csv(file = paste(path, "VA_pivot_part2_2023-12-31_17-52-14.csv", sep = "/")) 
+head(va)
+sapply(va,class)
+colnames(va) <- tolower(colnames(va))
+
+va<- va[,c("champsid", "id10476")]
+head(va)
+```
+
+
+```{r merging decode and va files with analytic dataset - dated december 4, 2023, echo = FALSE, warning = FALSE, message = FALSE}
+decode_va <- merge(decode, va, by = "champsid")
+
+analytic_1<- merge(ss_1, decode_va, by = "champsid", all.x = TRUE)
+
+discordance<- analytic_1 %>% 
+  dplyr::filter(anymal5l == "Yes")%>%  
+  dplyr::filter(fatlmaln_p12 == 0)#n = 489 discordant cases
+
+table(discordance$anymal5l, useNA = "always")
+
+discordance_rand_50 <- discordance[sample(nrow(discordance), 50), ]
+
+discordance_rand_60 <- discordance[sample(nrow(discordance), 60), ]
+
+discordance_rand_3 <- discordance[sample(nrow(discordance), 3), ]
+# Use write.csv to save the dataframe in the specified folder
+write.csv(discordance_rand_50, file = paste(path, "discordance_rand_50.csv", sep = "/"))  
+write.csv(discordance_rand_50, file = paste(path, "discordance_rand_50.csv", sep = "/")) 
+write.csv(discordance_rand_3, file = paste(path, "discordance_rand_3.csv", sep = "/"))  
+    
+# Use write.csv to save the dataframe in the specified folder
+write.csv(analytic_1, file = paste(path, "analytic_1.csv", sep = "/"))
+
+analytic_2<- merge(ss_2, decode_va, by = "champsid", all.x = TRUE)
+# Use write.csv to save the dataframe in the specified folder
+write.csv(analytic_2, file = paste(path, "analytic_2.csv", sep = "/"))
+```
+
+
+```{r - exploring the data}
+#contingency tables Jan 16
+table(ss_1$anymal5l, useNA = "always")
+
+table(ss_1$fatlmaln_p12, useNA = "always")
+
+table(ss_1$fatlmaln_p12, ss_1$undweicatl, useNA = "always")
+table(ss_1$fatlmaln_p12, ss_1$zaccatl, useNA = "always")
+table(ss_1$fatlmaln_p12, ss_1$wastcatl, useNA = "always")
+table(ss_1$fatlmaln_p12, ss_1$stuntcatl, useNA = "always")
+table(ss_1$fatlmaln_p12, ss_1$anymal5l, useNA = "always")
+
+table(ss_1$concordance, useNA = "always")
+table(ss_1$concordance2, useNA = "always")
+ex<-ss_1
+```
+
+
+```{r - clearing the environment}
+# Specify the names of data frames to remove
+data_frames_to_remove <- paste0("dt", 1:13)
+
+# Remove the specified data frames
+rm(list = data_frames_to_remove)
+
+# Check the remaining data frames
+ls(pattern = "dt")
+```
+
+
+```{r table 1 - sample demographics, echo = FALSE, warning = FALSE, message = FALSE}
+library(gtsummary)
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+table_1 <- ss_1 %>%
+  dplyr::select(site_name, agecat_ml, sex, calc_location, 
+                zwei, undweicatl,
+                zac, zaccatl, 
+                zwfl, wastcatl, 
+                zlen, stuntcatl, 
+                anymal4l, anymal5l, anymal6l,   
+                prevent_dicho, 
+                fatlmaln_p12, fatlmaln_p1, fatlmaln_p2) %>%
+  tbl_summary(by = ,
+              label = list(site_name = "Site", 
+                           agecat_ml = "Age in months",
+                           sex = "Sex", 
+                           calc_location = "Location of Death",
+                           
+                           zwei = "Weight-for-age Z-score", 
+                           undweicatl = "Severtiy of Underweight", 
+                           
+                          
+                           zac = "Arm Circumference Z-score", 
+                           zaccatl = "Severtiy of Acute Malnutrition", 
+                            
+                           
+                           zwfl = "Weight-for-Length/Height Z-score", 
+                           wastcatl = "Severtiy of Wasting", 
+                            
+                           
+                           zlen = "Length/Height-for-age Z-score", 
+                           stuntcatl = "Severtiy of Stunting", 
+                           
+                           anymal4l = "Any mild to severe malnutrition based on MITS Anthropometry", 
+                           anymal5l = "Any moderate to severe malnutrition based on MITS Anthropometry", 
+                           anymal6l = "Any severe malnutrition based on MITS Anthropometry", 
+                          
+                           fatlmaln_p12 = "Malnutrition recorded in Part 1 or 2",
+                           fatlmaln_p1 = "Malnutrition recorded in Part 1", 
+                           fatlmaln_p2 = "Malnutrition recorded in 2",
+                           
+                           prevent_dicho = "Preventable death (Yes or No)"),
+              
+                statistic = list(all_continuous() ~ "{median} ({IQR})" ,
+                                all_categorical() ~ "{n} ({p}%)"),
+                
+                missing = "always",
+                digits = everything() ~ 1,
+                percent = "col")%>%
+                add_n()
+
+table_1
+```
+
+
+```{r table 1.1 - mean and SD (swap out ss_1 with ss_2), echo = FALSE, warning = FALSE, message = FALSE}
+library(gtsummary)
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+table_1 <- ss_2 %>%
+  dplyr::select(site_name, agecat_ml, sex, calc_location, 
+                zwei, undweicatl, undweil,
+                zlen, stuntcatl, stuntl,
+                zwfl, wastcatl, wastl,
+                zac, zaccatl, samacl,
+                anymal5l, 
+                prevent_dicho, 
+                fatlmaln_p12, fatlmaln_p1, fatlmaln_p2) %>%
+  tbl_summary(by = ,
+              label = list(site_name = "Site", 
+                           age_d = "Age in days",
+                           agecat_ml = "Age in months",
+                           sex = "Sex", 
+                           calc_location = "Location of Death",
+                           lbwl = "Clinical Record of Low Birthweight",
+                           ptbl = "Clinical Record of Preterm Birth", 
+                           preterm = "Expanded Definition of Preterm Birth",
+                           
+                           htlg = "Height or length at death",
+                           wt = "Weight at death",
+                           
+                           zwei = "Weight-for-age Z-score", 
+                           undweicatl = "Severtiy of Underweight", 
+                           undweil = "Any Mild-Severe Underweight", 
+                           
+                           zlen = "Length/Height-for-age Z-score", 
+                           stuntcatl = "Severtiy of Stunting", 
+                           stuntl = "Any Mild-Severe Stunting", 
+                           
+                           zwfl = "Weight-for-Length/Height Z-score", 
+                           wastcatl = "Severtiy of Wasting", 
+                           wastl = "Any Mild-Severe Wasting", 
+                           
+                           zac = "Arm Circumference Z-score", 
+                           zaccatl = "Severtiy of Acute Malnutrition", 
+                           samacl = "Any Acute Malnutrition", 
+                           
+                           anymal4l = "Any mild to severe malnutrition based on MITS Anthropometry", 
+                           anymal5l = "Any moderate to severe malnutrition based on MITS Anthropometry", 
+                           anymal6l = "Any severe malnutrition based on MITS Anthropometry", 
+                          
+                           acutemal2l = "Acute Malnutrition",
+                           
+                           fatlmaln_p12 = "Malnutrition recorded in Part 1 or 2",
+                           fatlmaln_p1 = "Malnutrition recorded in Part 1", 
+                           fatlmaln_p2 = "Malnutrition recorded in 2",
+                           
+                           numb_cc = "Count of Causal Conditions",
+                           prevent = "Preventable death (Yes or No)"),
+              
+                statistic = list(all_continuous() ~ "{median} ({IQR})" ,
+                                all_categorical() ~ "{n} ({p}%)"),
+                
+                missing = "always",
+                digits = everything() ~ 1,
+                percent = "col")%>%
+                add_n()
+                
+
+table_1
+```
+
+
+```{r table 2 - performance metrics Se Sp, echo = FALSE, warning = FALSE, message = FALSE}
+#Any underweight or severity of underweight by undernutrition acknowledged clinically
+install.packages("epiR")
+library(epiR)
+
+
+# ONE
+table(ss_1$undweil, ss_1$fatlmaln_p12, useNA = "always")
+# Example data
+#             Actual Positive Actual Negative
+# Test Positive              a              b
+# Test Negative              c              d
+a <- 513  # True positives
+b <- 324  # False positives
+c <- 59   # False negatives
+d <- 499  # True negatives
+cont_table1 <- matrix(c(a,b,c,d), nrow = 2, byrow = TRUE)
+colnames(cont_table1) <- c("DeCoDe Yes", "DeCoDe No")
+rownames(cont_table1) <- c("PAM Yes", "PAM No")
+cont_table1
+epi.tests(cont_table1, method = "exact", digits = 3)
+
+
+# TWO
+table(ss_1$samacl, ss_1$fatlmaln_p12, useNA = "always")
+# Example data
+#             Actual Positive Actual Negative
+# Test Positive              a              b
+# Test Negative              c              d
+a <- 391  # True positives
+b <- 118  # False positives
+c <- 117   # False negatives
+d <- 533  # True negatives
+cont_table2 <- matrix(c(a,b,c,d), nrow = 2, byrow = TRUE)
+colnames(cont_table2) <- c("DeCoDe Yes", "DeCoDe No")
+rownames(cont_table2) <- c("PAM Yes", "PAM No")
+cont_table2
+epi.tests(cont_table2, method = "exact", digits = 3)
+epi.kappa(cont_table1)
+
+
+
+# THREE
+table(ss_1$wastl, ss_1$fatlmaln_p12, useNA = "always")
+# Example data
+#             Actual Positive Actual Negative
+# Test Positive              a              b
+# Test Negative              c              d
+a <- 453  # True positives
+b <- 268  # False positives
+c <- 95   # False negatives
+d <- 495  # True negatives
+cont_table3 <- matrix(c(a,b,c,d), nrow = 2, byrow = TRUE)
+colnames(cont_table3) <- c("DeCoDe Yes", "DeCoDe No")
+rownames(cont_table3) <- c("PAM Yes", "PAM No")
+epi.tests(cont_table3, method = "exact", digits = 3)
+
+
+# FOUR
+table(ss_1$stuntl, ss_1$fatlmaln_p12, useNA = "always")
+# Example data
+#             Actual Positive Actual Negative
+# Test Positive              a              b
+# Test Negative              c              d
+a <- 340  # True positives
+b <- 240  # False positives
+c <- 222  # False negatives
+d <- 567  # True negatives
+
+cont_table4 <- matrix(c(a,b,c,d), nrow = 2, byrow = TRUE)
+colnames(cont_table4) <- c("DeCoDe Yes", "DeCoDe No")
+rownames(cont_table4) <- c("PAM Yes", "PAM No")
+epi.tests(cont_table4, method = "exact", digits = 3)
+
+
+# FIVE
+table(ss_1$anymal5l, ss_1$fatlmaln_p12, useNA = "always")
+# Example data
+#             Actual Positive Actual Negative
+# Test Positive              a              b
+# Test Negative              c              d
+
+a <- 556  # True positives
+b <- 489  # False positives
+c <- 16  # False negatives
+d <- 344  # True negatives
+
+cont_table5 <- matrix(c(a,b,c,d), nrow = 2, byrow = TRUE)
+colnames(cont_table5) <- c("DeCoDe Yes", "DeCoDe No")
+rownames(cont_table5) <- c("PAM Yes", "PAM No")
+epi.tests(cont_table5, method = "exact", digits = 3)
+```
+
+
+```{r table 3 , echo = FALSE, warning = FALSE, message = FALSE}
+library(gtsummary)
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+tbl3_r <- ss_1 %>%
+  dplyr::select(site_name, age_d, agecat_ml,sex, calc_location, 
+                 prevent_dicho,  concordance, concordance2) %>%
+  tbl_summary(by = concordance, #concordance, #delete
+              label = list(site_name = "Site", 
+                           agecat_ml = "Age in months",
+                           sex = "Sex", 
+                           calc_location = "Location of Death",
+                           prevent_dicho = "Preventable death (Yes or No)"),
+              
+                statistic = list(all_continuous() ~ "{median} ({IQR}", 
+                                all_categorical() ~ "{n} ({p}%)"),
+                
+             
+              missing = "always",
+                digits = everything() ~ 1,
+                percent = "row")%>%
+                add_p() %>%
+  add_overall()
+
+tbl3_r
+```
+
+
+```{r supp table 1 - Causal chain classifications and ICD-10 codes , echo = FALSE, warning = FALSE, message = FALSE}
+library(gtsummary)
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+tbl1supp_v1 <- dt17 %>%
+  dplyr::select(ic_t3, uc_t3, mc_t3, osc_t3, agecat_ml, icd_b22.2, icd_e40.0,                        
+              icd_e40, icd_e41, icd_e42, icd_e43, icd_e44, icd_e44.0, icd_e44.1, icd_e45, icd_e46) %>%
+  tbl_summary(by = agecat_ml,
+              label = list(
+                           ic_t3 = "Immediate cause of death",
+                           uc_t3 = "Underlying cause of death",
+                           mc_t3 = "Morbid cause of death",
+                           osc_t3 = "Other significant cause of death",
+                           
+                           icd_b22.2 = "HIV disease resulting in wasting syndrome",
+                           
+                           icd_e40.0 = "Kwashiorkor",
+                           icd_e40 = "Kwashiorkor",
+                           icd_e41 = "Nutritional Marasmus",
+                           icd_e42 = "Marasmic Kwashiorkor",
+                           icd_e43 = "Unspecified Severe PCM",
+                           icd_e44 = "PCM of moderate-mild degree",
+                          
+                           icd_e44.0 = "Modeerate PEM",
+                           icd_e44.1 = "Mild PCM",
+                           
+                           icd_e45 = "Retarded development following PCM",
+                           icd_e46 = "Unspecified PCM"),
+              
+                statistic = list(
+                                  all_continuous() ~ "{median} ({IQR})",
+                                  all_categorical() ~ "{n} ({p}%)"),
+                
+                missing = "always",
+                digits = everything() ~ 1,
+                percent = "col") %>%
+  add_overall()
+
+tbl1supp_v1
+```
+
+
+```{r confirming limitations of ZAC }
+zac_miss<-ss_1%>% 
+  dplyr::filter(is.na (zaccat))%>%
+  dplyr::select(champsid, site_name, age_d, agecat_ml,catchmentid, age_group, zac, fac, samac, samacl, zaccat, zaccatl)
+```
+
+
+```{r MODELING }
+##crude - undweicatl  - ss_1
+m1<-glm(fatlmaln_p12 ~ undweicatl + agecat_ml + sex + site_name, 
+       data=ss_1,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+m1<-glm(fatlmaln_p12 ~ zaccatl + agecat_ml + sex + site_name, 
+       data=ss_1,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+m1<-glm(fatlmaln_p12 ~ wastcatl + agecat_ml + sex + site_name, 
+       data=ss_1,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+m1<-glm(fatlmaln_p12 ~ stuntcatl + agecat_ml + sex + site_name, 
+       data=ss_1,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+```
+
+
+```{r CONFOUNDING ASSESSMENT : CHI-SQ TESTS: OUTCOME AND COVARIATES} 
+#CONFOUNDING ASSESSMENT METHOD 1.0: CHI-SQ TESTS: COVAR and Malnutrition in Part 1 or Part 2 (Yes/No) 
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+cs1<-ss_1 |> dplyr::select(fatlmaln_p12,
+                           site_name,
+                           agecat_ml,
+                           sex, calc_location,
+                           ht, wt, ac, zlen, zwei, zwfl, zac,
+                           wastl, wastcatl,
+                           stuntl, stuntcatl,
+                           undweil, undweicatl,
+                           samacl, zaccatl,
+                           anymal4l)
+                                   
+cs1 |> tbl_summary(by = fatlmaln_p12,
+                    label = list(
+                      site_name ~ "site",
+                      agecat_ml ~ "age in months",
+                      sex ~ "sex", 
+                      calc_location ~ "location of death",
+                      
+                      ht ~ "continuous pstmrtm height/length", 
+                      wt ~ "continuous pstmrtm weight", 
+                      ac ~ "continuous pstmrtm arm circumference", 
+                      
+                      zlen ~ "length for age z score", 
+                      zwei ~ "weight for age z score", 
+                      zwfl ~ "length for weight z score", 
+                      zac ~ "arm circumference z score",
+                      
+                      wastl ~ "any wasting (yes/no)", 
+                      
+                      stuntl ~ "any stunting (yes/no)", 
+                      stuntcatl ~ "severity of stunting",
+                      
+                      undweil ~ "any underweight (yes/no)", 
+                      undweicatl ~ "severity of underweight",
+                      
+                      samacl ~ "any acute mal (yes/no)", 
+                      zaccatl ~ "severity of acute mal",
+                      
+                      anymal4l ~ "any malnutrition"),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Malnutrition Noted in Part 1 or 2 (Yes/No)**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("** Chi Square tests with Covariates and Outcome **") 
+```
+
+
+```{r CONFOUNDING ASSESSMENT : CHI-SQ TESTS: EXPOSURES OF INTEREST AND COVARIATES} 
+#CONFOUNDING ASSESSMENT METHOD 1.0: CHI-SQ TESTS: COVAR and Exposures of Interest 
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+cs1<-ss_1 |> dplyr::select(fatlmaln_p12,
+                           site_name,
+                           agecat_ml,
+                           sex, calc_location,
+                           ht, wt, ac, zlen, zwei, zwfl, zac,
+                           wastl, wastcatl,
+                           stuntl, stuntcatl,
+                           undweil, undweicatl,
+                           samacl, zaccatl,
+                           anymal4l)
+                                   
+cs1 |> tbl_summary(by = anymal4l,
+                    label = list(
+                      site_name ~ "site",
+                      agecat_ml ~ "age in months",
+                      sex ~ "sex", 
+                      calc_location ~ "location of death",
+                      
+                      ht ~ "continuous pstmrtm height/length", 
+                      wt ~ "continuous pstmrtm weight", 
+                      ac ~ "continuous pstmrtm arm circumference", 
+                      
+                      zlen ~ "length for age z score", 
+                      zwei ~ "weight for age z score", 
+                      zwfl ~ "length for weight z score", 
+                      zac ~ "arm circumference z score",
+                      
+                      wastl ~ "any wasting (yes/no)", 
+                      
+                      stuntl ~ "any stunting (yes/no)", 
+                      
+                      undweil ~ "any underweight (yes/no)", 
+                      
+                      samacl ~ "any acute mal (yes/no)"),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "**Malnutrition Noted in Part 1 or 2 (Yes/No)**") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("** Chi Square tests with Covariates and Outcome **") 
+```
+
+
+```{r CONFOUNDING ASSESSMENT : CHI-SQ TESTS: DICHOTOMOUS EXPOSURE AND COVARIATES} 
+#CONFOUNDING ASSESSMENT METHOD 1.0: CHI-SQ TESTS: COVAR and Malnutrition in Part 1 or Part 2 (Yes/No) 
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "jama")
+theme_gtsummary_compact()
+
+cs1<-ss_1 |> dplyr::select(fatlmaln_p12,
+                           site_name,
+                           agecat_ml,
+                           sex, calc_location,
+                           ht, wt, ac, zlen, zwei, zwfl, zac,
+                           wastl, 
+                           stuntl, 
+                           undweil, 
+                           samacl, 
+                           anymal5l)
+                                   
+cs1 |> tbl_summary(by = anymal5l,#SWAP OUT
+                    label = list(
+                      site_name ~ "site",
+                      agecat_ml ~ "age in months",
+                      sex ~ "sex", 
+                      calc_location ~ "location of death",
+                      
+                      ht ~ "continuous pstmrtm height/length", 
+                      wt ~ "continuous pstmrtm weight", 
+                      ac ~ "continuous pstmrtm arm circumference", 
+                      
+                      zlen ~ "length for age z score", 
+                      zwei ~ "weight for age z score", 
+                      zwfl ~ "length for weight z score", 
+                      zac ~ "arm circumference z score",
+                      
+                      wastl ~ "any wasting (yes/no)", 
+                      
+                      stuntl ~ "any stunting (yes/no)", 
+                      
+                      undweil ~ "any underweight (yes/no)", 
+                      
+                      samacl ~ "any acute mal (yes/no)"), 
+                      #zaccatl ~ "severity of acute mal",
+                      
+                      #anymal4l ~ "any malnutrition"),
+                    
+                    statistic = list(
+                      all_continuous() ~ "{mean} ({sd})",
+                      all_categorical() ~ "{n} ({p}%)"),
+                    missing = "no",
+                    digits = everything() ~ 1,
+                    percent = "row") |>
+  add_overall() |>                  
+  add_p() |> 
+  add_n() |> 
+  bold_labels() |> 
+modify_spanning_header(c("stat_1", "stat_2") ~ "Any Malnutrition (Yes/No)") |> 
+bold_p() |> 
+    separate_p_footnotes() |> 
+   modify_caption("** Chi Square tests with Covariates and Exposures of Interest **") 
+```
+
+
+```{r OLD MODELING: OUTCOME: UNDERNUTRITION IN P1 OR P2 OF THE DC | EXPOSURES: VARIABLE }
+#severity of wasting/stunting/underweight/acute malnutrition/any malnutrition: CRUDE/ADJUSTED with SS_1 vs. CRUDE/ADJUSTED with SS_2
+#Figure Panel A: adjusted models looking and independent relationship with outcome, vs. panel B put all in the model to show which is most predictive of maln-specific deaths
+#which is most predictive of malnutrition-specific deaths-- need to change reference to be (no)
+#any wasting/stunting/underweight/AM
+m1<-glm(fatlmaln_p12 ~  wast +  stunt + undwei + samac , 
+       data=ss_1,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+
+m1<-glm(fatlmaln_p12 ~  wastcatl +  stuntcatl + undweicatl + zaccatl + agecat_ml + sex + site_name, 
+       data=ss_1,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+
+##crude - wasting - ss_1
+m1<-glm(fatlmaln_p12 ~ undweicatl + agecat_ml + sex + site_name, 
+       data=ss_1,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+##adjusted
+m1<-glm(fatlmaln_p12 ~ zaccatl + agecat_ml + sex + site_name , 
+       data=ss_2,
+       family = binomial())
+summary(m1)
+tbl_regression(m1, exponentiate=TRUE)
+
+```
+
+
+```{r FIGURE 1}
+library(tidyverse)
+path<-("/Users/priyamgdas/Library/CloudStorage/OneDrive-EmoryUniversity/Dissertation Files/Manuscripts/Aim 2- Discordance between anthropometric malnutrition and fatal malnutrition/0 - Data & Analysis Plan/CSV data") 
+# Read a CSV file and create a tibble from it, selecting specific columns and filtering rows
+adjmod <- read.csv(file = paste(path, "adjusted_models_v_02162024.csv", sep = "/")) |>
+  as_tibble() |>
+  select(pam = postmortem.anthropometric.malnutrition, severity, or, l.ci, u.ci, pval) |>
+  filter(severity != "")
+
+# Create a new column 'pam' with repeated values
+adjmod$pam <- c("Underweight (ZWEI)", "Wasting (ZAC)", "Wasting (ZWFL)", "Stunting (ZLEN)") |>
+  lapply(function(x) rep(x, 3)) |>
+  unlist()
+
+# Modify the 'adjmod' tibble by transforming and creating new variables
+adjmod <- adjmod |>
+  mutate(
+    pam = factor(pam, levels = c("Underweight (ZWEI)", "Wasting (ZAC)", "Wasting (ZWFL)", "Stunting (ZLEN)")) |>
+      str_wrap(width = 10), severity = factor(severity, levels = c("at-risk", "moderate", "severe"), labels = c("At-risk", "Moderate", "Severe")),
+    # Create a label variable with odds ratios, confidence intervals, and p-values
+    label = paste(sprintf('%.2f', or), " (", sprintf('%.2f', l.ci), ", ", sprintf('%.2f', u.ci), ")\np-value: ", pval, sep = "")
+  )
+
+adjmod <- adjmod |> 
+  mutate(
+    pam = factor(pam, levels = c("Underweight\n(ZWEI)", "Wasting\n(ZAC)", "Wasting\n(ZWFL)", "Stunting\n(ZLEN)"))
+  ) 
+
+ggplot(data = adjmod) + 
+  theme_light() +
+  geom_point(aes(x = or, y = rev(severity), color = severity)) +
+  geom_errorbarh(aes(xmin = l.ci, xmax = u.ci, y = rev(severity), color = severity), height=0) +
+  
+  # adding label
+  geom_text(
+    aes(
+      color = severity,
+      y = rev(severity),
+      label = label,
+      x = 330         # label position
+    ),
+    lineheight = 0.8, # line space between ORs and pvals
+    hjust = 1,        # right justify
+    size = 2.8,
+    fontface="bold",# font size
+    show.legend = F)+
+  coord_cartesian(clip = "off", xlim=c(1, 91)) + # this allows you to add the label to the right of the plot
+  
+  scale_x_continuous(trans = "log", labels = scales::number_format(accuracy = 0.1)) +
+  facet_grid(pam~., switch = "y") +
+  # theme_linedraw() + 
+  geom_vline(xintercept = 1, size = 0.4, linetype = "dashed", color = "black") +
+  labs(
+    color = "Severity", 
+    x = "Odds of Malnutrition as a Causal or Significant Contributor to Death", 
+    y = "Type & Severity of Postmortem Anthropometric Malnutrition"
+  ) + 
+  scale_color_manual(values = c("At-risk" = "orange", "Moderate" = "hotpink", "Severe" = "red")) +
+  theme(
+    
+    plot.margin = unit(c(1,8.2,1,1), "lines"), # adding extra blank space to the right
+    strip.background = element_rect(fill = 'grey40'),
+    axis.title=element_text(face='bold',size=9),
+    legend.position = "bottom",  # Move legend to the bottom
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  guides(color = guide_legend(title = NULL))  # Remove legend title
+
+```
+
+
